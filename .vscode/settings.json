@@ -56,5 +56,6 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "ProjectMagicBattle.sln"
+    "dotnet.defaultSolution": "ProjectMagicBattle.sln",
+    "git.ignoreLimitWarning": true
 }
