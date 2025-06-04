@@ -265,10 +265,11 @@ namespace MagicBattle.UI
         /// </summary>
         private void UpdateSynthesisUI()
         {
-            // 합성 텍스트 표시 및 색상
+            // 합성 텍스트 표시 및 색상 (선택된 상태에서만 표시)
             if (synthesisText != null)
             {
-                if (currentSkillCount > 0)
+                // 선택된 상태이고 스킬을 보유한 경우에만 합성 텍스트 표시
+                if (isSelected && currentSkillCount > 0)
                 {
                     synthesisText.gameObject.SetActive(true);
                     
@@ -285,6 +286,7 @@ namespace MagicBattle.UI
                 }
                 else
                 {
+                    // 선택되지 않았거나 스킬이 없으면 합성 텍스트 숨김
                     synthesisText.gameObject.SetActive(false);
                 }
             }
@@ -404,6 +406,9 @@ namespace MagicBattle.UI
                 // 선택 해제 상태 - 기본 속성 색상으로 복구
                 SetAttributeColor();
             }
+
+            // 선택 상태 변경 시 합성 UI 업데이트
+            UpdateSynthesisUI();
         }
 
         /// <summary>

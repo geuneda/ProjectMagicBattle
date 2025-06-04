@@ -14,11 +14,13 @@ namespace MagicBattle.Player
     {
         [Header("스킬 관리")]
         [SerializeField] private List<SkillData> availableSkills = new List<SkillData>(); // 사용 가능한 스킬 리스트
+        [SerializeField] private SkillDatabase skillDatabase; // 스킬 데이터베이스 참조
 
         [Header("디버그 및 테스트")]
         [SerializeField] private bool enableDebugLogs = true; // 디버그 로그 활성화
         [SerializeField] private bool addTestSkillOnStart = true; // 시작 시 테스트 스킬 추가
         [SerializeField] private int testSkillsCount = 1; // 추가할 테스트 스킬 개수
+        [SerializeField] private bool useSkillDatabase = true; // SkillDatabase 사용 여부
 
         // 보유 스킬 정보 (스킬ID -> 스택 수)
         private Dictionary<string, int> ownedSkills = new Dictionary<string, int>();
@@ -91,6 +93,49 @@ namespace MagicBattle.Player
         {
             skillDataMap.Clear();
 
+            // SkillDatabase 우선 사용
+            if (useSkillDatabase && skillDatabase != null)
+            {
+                InitializeFromSkillDatabase();
+            }
+            else
+            {
+                InitializeFromAvailableSkills();
+            }
+
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PlayerSkillManager] 스킬 데이터 초기화 완료. {skillDataMap.Count}개의 스킬 등록됨.");
+            }
+        }
+
+        /// <summary>
+        /// SkillDatabase에서 스킬 데이터 초기화
+        /// </summary>
+        private void InitializeFromSkillDatabase()
+        {
+            skillDatabase.Initialize();
+            List<SkillData> allSkills = skillDatabase.GetAllSkills();
+            
+            foreach (SkillData skill in allSkills)
+            {
+                if (skill != null)
+                {
+                    RegisterSkillData(skill);
+                }
+            }
+
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PlayerSkillManager] SkillDatabase에서 {allSkills.Count}개의 스킬을 로드했습니다.");
+            }
+        }
+
+        /// <summary>
+        /// availableSkills 리스트에서 스킬 데이터 초기화 (백업 방식)
+        /// </summary>
+        private void InitializeFromAvailableSkills()
+        {
             // 사용 가능한 스킬들을 딕셔너리에 매핑
             foreach (SkillData skill in availableSkills)
             {
@@ -102,7 +147,7 @@ namespace MagicBattle.Player
 
             if (enableDebugLogs)
             {
-                Debug.Log($"[PlayerSkillManager] 스킬 데이터 초기화 완료. {skillDataMap.Count}개의 스킬 등록됨.");
+                Debug.Log($"[PlayerSkillManager] availableSkills에서 {availableSkills.Count}개의 스킬을 로드했습니다.");
             }
         }
 
@@ -264,8 +309,8 @@ namespace MagicBattle.Player
                     Debug.Log($"[PlayerSkillManager] 스킬 {skillData.SkillName} 스택 증가: {ownedSkills[skillID]}");
                 }
 
-                // 승급 조건 체크
-                CheckForSkillUpgrade(skillData);
+                // 자동 승급 제거 - 수동 합성만 허용
+                // CheckForSkillUpgrade(skillData); // 주석 처리됨
             }
             else
             {
@@ -283,45 +328,19 @@ namespace MagicBattle.Player
         }
 
         /// <summary>
-        /// 스킬 승급 조건 확인 및 처리
+        /// 스킬 승급 조건 확인 및 처리 (사용 안함 - 수동 합성만 허용)
         /// </summary>
         /// <param name="skillData">확인할 스킬</param>
+        [System.Obsolete("자동 승급이 제거되었습니다. SynthesizeSkill을 사용하세요.")]
         private void CheckForSkillUpgrade(SkillData skillData)
         {
-            string skillID = skillData.GetSkillID();
-            int currentStack = ownedSkills[skillID];
-
-            // 승급 조건 확인 (3개 이상 && 최대 등급이 아님)
-            if (currentStack >= Constants.SKILL_UPGRADE_REQUIRED_COUNT && skillData.Grade < SkillGrade.Grade3)
+            // 이 메서드는 더 이상 사용되지 않습니다.
+            // 수동 합성만 허용하므로 자동 승급 기능이 제거되었습니다.
+            // 스킬 합성은 UI에서 SynthesizeSkill() 메서드를 통해서만 가능합니다.
+            
+            if (enableDebugLogs)
             {
-                // 상위 등급 스킬 ID 생성
-                SkillGrade nextGrade = (SkillGrade)((int)skillData.Grade + 1);
-                string nextGradeSkillID = $"{skillData.Attribute}_{nextGrade}";
-
-                // 상위 등급 스킬이 존재하는지 확인
-                if (skillDataMap.ContainsKey(nextGradeSkillID))
-                {
-                    // 현재 스킬 스택에서 3개 제거
-                    ownedSkills[skillID] -= Constants.SKILL_UPGRADE_REQUIRED_COUNT;
-                    if (ownedSkills[skillID] <= 0)
-                    {
-                        ownedSkills.Remove(skillID);
-                    }
-
-                    // 상위 등급 스킬 획득
-                    SkillData upgradedSkill = skillDataMap[nextGradeSkillID];
-                    AcquireSkill(upgradedSkill);
-
-                    if (enableDebugLogs)
-                    {
-                        Debug.Log($"[PlayerSkillManager] 스킬 승급: {skillData.SkillName} -> {upgradedSkill.SkillName}");
-                    }
-                    OnSkillUpgraded?.Invoke(upgradedSkill);
-                }
-                else if (enableDebugLogs)
-                {
-                    Debug.LogWarning($"[PlayerSkillManager] 상위 등급 스킬을 찾을 수 없습니다: {nextGradeSkillID}");
-                }
+                Debug.LogWarning("[PlayerSkillManager] CheckForSkillUpgrade는 더 이상 사용되지 않습니다. 수동 합성을 사용하세요.");
             }
         }
 
@@ -370,16 +389,13 @@ namespace MagicBattle.Player
                 return false;
             }
 
-            // 상위 등급 스킬 ID 생성
-            SkillGrade nextGrade = (SkillGrade)((int)skillData.Grade + 1);
-            string nextGradeSkillID = $"{skillData.Attribute}_{nextGrade}";
-
-            // 상위 등급 스킬이 존재하는지 확인
-            if (!skillDataMap.ContainsKey(nextGradeSkillID))
+            // 다음 등급의 랜덤 속성 스킬 찾기
+            SkillData upgradedSkill = GetRandomUpgradeSkill(skillData.Grade);
+            if (upgradedSkill == null)
             {
                 if (enableDebugLogs)
                 {
-                    Debug.LogError($"[PlayerSkillManager] 상위 등급 스킬을 찾을 수 없습니다: {nextGradeSkillID}");
+                    Debug.LogError($"[PlayerSkillManager] 다음 등급의 랜덤 스킬을 찾을 수 없습니다: {skillData.SkillName}");
                 }
                 return false;
             }
@@ -391,31 +407,31 @@ namespace MagicBattle.Player
                 ownedSkills.Remove(skillID);
             }
 
-            // 상위 등급 스킬 획득
-            SkillData upgradedSkill = skillDataMap[nextGradeSkillID];
-            if (ownedSkills.ContainsKey(nextGradeSkillID))
+            // 랜덤 속성의 상위 등급 스킬 획득
+            string upgradedSkillID = upgradedSkill.GetSkillID();
+            if (ownedSkills.ContainsKey(upgradedSkillID))
             {
-                ownedSkills[nextGradeSkillID]++;
+                ownedSkills[upgradedSkillID]++;
             }
             else
             {
-                ownedSkills.Add(nextGradeSkillID, 1);
+                ownedSkills.Add(upgradedSkillID, 1);
             }
 
             if (enableDebugLogs)
             {
-                Debug.Log($"[PlayerSkillManager] 수동 스킬 합성 완료: {skillData.SkillName} -> {upgradedSkill.SkillName}");
+                Debug.Log($"[PlayerSkillManager] 수동 스킬 합성 완료: {skillData.SkillName} ({skillData.Attribute} {skillData.Grade}) -> {upgradedSkill.SkillName} ({upgradedSkill.Attribute} {upgradedSkill.Grade})");
             }
             
             // 이벤트 발생
             OnSkillUpgraded?.Invoke(upgradedSkill);
-            OnSkillAcquired?.Invoke(upgradedSkill, ownedSkills[nextGradeSkillID]);
+            OnSkillAcquired?.Invoke(upgradedSkill, ownedSkills[upgradedSkillID]);
 
             return true;
         }
 
         /// <summary>
-        /// 스킬 합성 가능 여부 확인
+        /// 스킬 합성 가능 여부 확인 (랜덤 속성으로 합성됨)
         /// </summary>
         /// <param name="skillData">확인할 스킬</param>
         /// <returns>합성 가능 여부</returns>
@@ -428,6 +444,94 @@ namespace MagicBattle.Player
             bool canUpgrade = skillData.Grade < SkillGrade.Grade3;
 
             return hasRequiredStack && canUpgrade;
+        }
+
+        /// <summary>
+        /// 상위 등급 스킬 찾기 (SkillDatabase 또는 skillDataMap 사용)
+        /// </summary>
+        /// <param name="skillData">기준 스킬</param>
+        /// <returns>상위 등급 스킬 (없으면 null)</returns>
+        private SkillData GetUpgradeSkill(SkillData skillData)
+        {
+            if (skillData == null || skillData.Grade >= SkillGrade.Grade3)
+                return null;
+
+            // SkillDatabase 우선 사용
+            if (useSkillDatabase && skillDatabase != null)
+            {
+                SkillData upgradeSkill = skillDatabase.GetUpgradeSkill(skillData);
+                if (upgradeSkill != null)
+                {
+                    // 스킬을 찾았으면 skillDataMap에도 등록
+                    RegisterSkillData(upgradeSkill);
+                    return upgradeSkill;
+                }
+            }
+
+            // SkillDatabase에서 찾지 못했거나 사용하지 않는 경우, skillDataMap에서 찾기
+            SkillGrade nextGrade = (SkillGrade)((int)skillData.Grade + 1);
+            string nextGradeSkillID = $"{skillData.Attribute}_{nextGrade}";
+
+            if (skillDataMap.ContainsKey(nextGradeSkillID))
+            {
+                return skillDataMap[nextGradeSkillID];
+            }
+
+            if (enableDebugLogs)
+            {
+                Debug.LogWarning($"[PlayerSkillManager] 상위 등급 스킬을 찾을 수 없습니다: {skillData.SkillName} ({nextGradeSkillID})");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 다음 등급의 랜덤 속성 스킬 반환 (합성용)
+        /// </summary>
+        /// <param name="currentGrade">현재 등급</param>
+        /// <returns>다음 등급의 랜덤 스킬 (없으면 null)</returns>
+        private SkillData GetRandomUpgradeSkill(SkillGrade currentGrade)
+        {
+            if (currentGrade >= SkillGrade.Grade3)
+                return null;
+
+            SkillGrade nextGrade = (SkillGrade)((int)currentGrade + 1);
+
+            // SkillDatabase 우선 사용
+            if (useSkillDatabase && skillDatabase != null)
+            {
+                SkillData randomSkill = skillDatabase.GetRandomSkillByGrade(nextGrade);
+                if (randomSkill != null)
+                {
+                    // 스킬을 찾았으면 skillDataMap에도 등록
+                    RegisterSkillData(randomSkill);
+                    return randomSkill;
+                }
+            }
+
+            // SkillDatabase에서 찾지 못한 경우, skillDataMap에서 다음 등급의 모든 스킬 중 랜덤 선택
+            List<SkillData> nextGradeSkills = new List<SkillData>();
+            
+            foreach (var skill in skillDataMap.Values)
+            {
+                if (skill != null && skill.Grade == nextGrade)
+                {
+                    nextGradeSkills.Add(skill);
+                }
+            }
+
+            if (nextGradeSkills.Count > 0)
+            {
+                int randomIndex = Random.Range(0, nextGradeSkills.Count);
+                return nextGradeSkills[randomIndex];
+            }
+
+            if (enableDebugLogs)
+            {
+                Debug.LogWarning($"[PlayerSkillManager] {nextGrade} 등급의 스킬을 찾을 수 없습니다.");
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -574,6 +678,19 @@ namespace MagicBattle.Player
             Debug.Log($"등록된 스킬 데이터 수: {skillDataMap.Count}");
             Debug.Log($"마지막 스킬 사용 시간: {(lastSkillUsageTime > 0 ? (Time.time - lastSkillUsageTime).ToString("F1") + "초 전" : "사용한 적 없음")}");
             
+            // SkillDatabase 상태
+            Debug.Log($"SkillDatabase 사용: {useSkillDatabase}");
+            if (skillDatabase != null)
+            {
+                Debug.Log($"SkillDatabase 연결됨: {skillDatabase.name}");
+                Debug.Log($"SkillDatabase 전체 스킬 수: {skillDatabase.GetAllSkills().Count}");
+            }
+            else
+            {
+                Debug.Log("SkillDatabase 연결되지 않음");
+            }
+            Debug.Log($"availableSkills 수: {availableSkills.Count}");
+            
             if (skillSystem != null)
             {
                 Debug.Log("SkillSystem 연결됨");
@@ -590,9 +707,29 @@ namespace MagicBattle.Player
         [ContextMenu("랜덤 스킬 획득 (테스트)")]
         public void AcquireRandomSkillForTest()
         {
-            if (availableSkills.Count > 0)
+            SkillData randomSkill = null;
+
+            // SkillDatabase 우선 사용
+            if (useSkillDatabase && skillDatabase != null)
             {
-                SkillData randomSkill = availableSkills[Random.Range(0, availableSkills.Count)];
+                randomSkill = skillDatabase.GetRandomSkill();
+                if (enableDebugLogs)
+                {
+                    Debug.Log("[PlayerSkillManager] SkillDatabase에서 랜덤 스킬 선택");
+                }
+            }
+            // SkillDatabase가 없으면 availableSkills에서 선택
+            else if (availableSkills.Count > 0)
+            {
+                randomSkill = availableSkills[Random.Range(0, availableSkills.Count)];
+                if (enableDebugLogs)
+                {
+                    Debug.Log("[PlayerSkillManager] availableSkills에서 랜덤 스킬 선택");
+                }
+            }
+
+            if (randomSkill != null)
+            {
                 AcquireSkill(randomSkill);
             }
             else

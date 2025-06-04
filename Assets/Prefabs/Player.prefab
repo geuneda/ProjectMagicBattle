@@ -234,6 +234,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   availableSkills: []
+  skillDatabase: {fileID: 11400000, guid: 41b88544a39504cbe8b5c9e41d61f1e3, type: 2}
+  enableDebugLogs: 0
+  addTestSkillOnStart: 1
+  testSkillsCount: 1
+  useSkillDatabase: 1
 --- !u!114 &7959286620359362484
 MonoBehaviour:
   m_ObjectHideFlags: 0
