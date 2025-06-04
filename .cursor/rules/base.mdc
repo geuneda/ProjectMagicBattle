@@ -1,0 +1,184 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 방치형 2D 게임 개발 가이드 (Idle 2D Game Development Guide)
+
+## 🎯 게임 개요
+- **장르**: 방치형 2D 액션 게임
+- **핵심 메커니즘**: 자동 공격, 스킬 시스템, 몬스터 웨이브, 성장 시스템
+- **플레이어**: 상단 고정 위치에서 자동 공격 및 스킬 사용
+- **목표**: 몬스터 처치를 통한 골드 획득 및 스킬 강화
+
+## 📋 개발 단계별 계획
+
+### 1단계: 기본 프로젝트 설정 및 플레이어 시스템 (현재 단계)
+**구현 목표:**
+- 프로젝트 구조 설정
+- 플레이어 컨트롤러 기본 구조
+- 기본 공격 시스템
+- 입력 시스템 설정
+
+**Unity 에디터 작업:**
+- 2D Scene 설정
+- 플레이어 GameObject 생성
+- 카메라 설정 (고정)
+- Input System 설정
+
+### 2단계: 몬스터 시스템
+**구현 목표:**
+- 몬스터 스폰 시스템
+- 몬스터 AI (플레이어 추적, 공격)
+- 몬스터 체력 및 데미지 시스템
+- 오브젝트 풀링
+
+### 3단계: 스킬 시스템 기초
+**구현 목표:**
+- 스킬 데이터 구조 (ScriptableObject)
+- 스킬 3속성 × 3등급 = 9종류 정의
+- 기본 스킬 실행 시스템
+- 쿨타임 관리
+- 스킬은 모두 투사체
+
+### 4단계: 스킬 획득 및 강화 시스템
+**구현 목표:**
+- 골드 시스템
+- 확률 기반 스킬 획득
+- 스킬 중첩 시스템
+- 스킬 승급 시스템 (3개 → 다음 등급)
+
+### 5단계: UI 시스템
+**구현 목표:**
+- 게임 플레이 UI
+- 스킬 인벤토리 UI
+- 상점 UI
+- 게임오버 UI
+
+### 6단계: 게임 밸런싱 및 완성
+**구현 목표:**
+- 난이도 조절
+- 스킬 밸런싱
+- 사운드 및 이펙트
+- 최적화
+
+## 🏗️ 프로젝트 구조
+
+```
+Assets/
+├── Scripts/
+│   ├── Player/
+│   │   ├── PlayerController.cs
+│   │   ├── PlayerStats.cs
+│   │   ├── PlayerAttack.cs
+│   │   └── PlayerSkillManager.cs
+│   ├── Monster/
+│   │   ├── MonsterController.cs
+│   │   ├── MonsterSpawner.cs
+│   │   ├── MonsterStats.cs
+│   │   └── MonsterAI.cs
+│   ├── Skills/
+│   │   ├── SkillData.cs (ScriptableObject)
+│   │   ├── SkillSystem.cs
+│   │   ├── SkillEffect.cs
+│   │   └── SkillDatabase.cs
+│   ├── Managers/
+│   │   ├── GameManager.cs
+│   │   ├── UIManager.cs
+│   │   ├── PoolManager.cs
+│   │   └── GoldManager.cs
+│   ├── UI/
+│   │   ├── MainGameUI.cs
+│   │   ├── SkillShopUI.cs
+│   │   ├── InventoryUI.cs
+│   │   └── GameOverUI.cs
+│   └── Common/
+│       ├── Enums.cs
+│       ├── Constants.cs
+│       └── Utilities.cs
+├── Prefabs/
+├── Data/
+│   └── Skills/
+├── Sprites/
+└── Scenes/
+```
+
+## 🎮 핵심 시스템 설계
+
+### 스킬 시스템 설계
+```csharp
+public enum SkillAttribute
+{
+    Fire,    // 화염 속성
+    Ice,     // 빙결 속성
+    Thunder  // 번개 속성
+}
+
+public enum SkillGrade
+{
+    Grade1 = 1,
+    Grade2 = 2,
+    Grade3 = 3
+}
+
+// 스킬 데이터 구조
+[CreateAssetMenu(fileName = "SkillData", menuName = "Game/Skill Data")]
+public class SkillData : ScriptableObject
+{
+    public string skillName;
+    public SkillAttribute attribute;
+    public SkillGrade grade;
+    public float damage;
+    public float cooldown;
+    public float range;
+    public GameObject effectPrefab;
+    public Sprite icon;
+}
+```
+
+### 게임 플레이 흐름
+1. **플레이어 배치**: 화면 상단 중앙에 고정
+2. **자동 공격**: 기본 근접 공격 지속 실행
+3. **몬스터 스폰**: 하단에서 일정 간격으로 스폰
+4. **스킬 사용**: 획득한 스킬들이 쿨타임마다 자동 실행
+5. **골드 획득**: 몬스터 처치 시 골드 드롭
+6. **스킬 구매**: 골드로 랜덤 스킬 획득
+7. **성장**: 스킬 중첩 및 승급을 통한 강화
+
+## 🔧 구현 시 주의사항
+
+### 성능 최적화
+- **오브젝트 풀링**: 몬스터, 이펙트, 투사체는 반드시 풀링 사용
+- **DOTween 활용**: 애니메이션과 UI 효과는 DOTween으로 구현
+- **Find 금지**: 모든 참조는 Inspector나 Manager를 통해 설정
+
+### 확장성 고려
+- **ScriptableObject**: 스킬, 몬스터 데이터는 ScriptableObject로 관리
+- **이벤트 시스템**: UnityEvent나 커스텀 이벤트 시스템 활용
+- **모듈화**: 각 시스템은 독립적으로 동작하도록 설계
+
+### 데이터 관리
+- **JSON 저장**: 게임 진행 상황은 JSON으로 저장
+- **암호화**: 중요한 데이터는 간단한 암호화 적용
+- **버전 관리**: 데이터 구조 변경 시 버전 체크
+
+## 🎯 1단계 시작 체크리스트
+
+**Unity 에디터에서 해야 할 작업:**
+1. **Scene 설정**
+   - MainGame Scene 생성
+   - 2D 환경 설정
+   - 카메라 Orthographic 설정 (Size: 5)
+
+2. **플레이어 GameObject**
+   - 빈 GameObject "Player" 생성
+   - Transform Position: (0, 4, 0)
+   - SpriteRenderer 추가
+   - Collider2D 추가
+
+3. **폴더 구조**
+   - Scripts 폴더 내 하위 폴더들 생성
+   - Prefabs 폴더 생성
+   - Data 폴더 생성
+
+**첫 번째 구현: PlayerController 기본 구조**
