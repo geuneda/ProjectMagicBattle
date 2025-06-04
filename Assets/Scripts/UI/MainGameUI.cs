@@ -8,14 +8,15 @@ namespace MagicBattle.UI
 {
     /// <summary>
     /// 메인 게임 플레이 화면의 UI를 관리하는 클래스
-    /// 체력, 킬 수 등 기본 정보 표시
+    /// 체력, 킬 수, 웨이브 정보 등 기본 정보 표시
     /// </summary>
     public class MainGameUI : MonoBehaviour
     {
         [Header("게임 정보 UI")]
         [SerializeField] private TextMeshProUGUI killCountText;
         [SerializeField] private TextMeshProUGUI waveText;
-        [SerializeField] private TextMeshProUGUI timeText;
+        [SerializeField] private TextMeshProUGUI waveTimerText; // 웨이브 타이머 표시
+        [SerializeField] private TextMeshProUGUI waveStateText; // 웨이브 상태 표시 (선택적)
 
         [Header("플레이어 UI")]
         [SerializeField] private Slider healthSlider;
@@ -25,8 +26,10 @@ namespace MagicBattle.UI
         private PlayerStats playerStats;
         private SkillShopUI skillShopUI;
 
-        // 게임 시간 추적
-        private float gameTime = 0f;
+        // 웨이브 관련 변수
+        private int currentWave = 1;
+        private float waveTimer = 30f;
+        private WaveState currentWaveState = WaveState.Spawning;
 
         private void Awake()
         {
@@ -41,8 +44,7 @@ namespace MagicBattle.UI
 
         private void Update()
         {
-            UpdateGameTime();
-            UpdateUI();
+            UpdateKillCountUI(); // 킬 수는 실시간 업데이트
         }
 
         /// <summary>
@@ -76,6 +78,11 @@ namespace MagicBattle.UI
                 healthSlider.maxValue = playerStats.MaxHealth;
                 healthSlider.value = playerStats.CurrentHealth;
             }
+
+            // 웨이브 UI 초기 설정
+            UpdateWaveUI();
+            UpdateWaveTimerUI();
+            UpdateWaveStateUI();
         }
 
         /// <summary>
@@ -89,24 +96,68 @@ namespace MagicBattle.UI
                 playerStats.OnHealthChanged.AddListener(UpdateHealthUI);
                 playerStats.OnPlayerDeath.AddListener(OnPlayerDeath);
             }
+
+            // GameManager 웨이브 이벤트 구독
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnWaveChanged.AddListener(OnWaveChanged);
+                GameManager.Instance.OnWaveTimerUpdated.AddListener(OnWaveTimerUpdated);
+                GameManager.Instance.OnWaveStateChanged.AddListener(OnWaveStateChanged);
+                
+                // 현재 웨이브 정보 동기화
+                SyncWithGameManager();
+            }
+            else
+            {
+                Debug.LogError("GameManager.Instance가 null입니다!");
+            }
         }
 
         /// <summary>
-        /// 게임 시간 업데이트
+        /// GameManager와 동기화
         /// </summary>
-        private void UpdateGameTime()
+        private void SyncWithGameManager()
         {
-            gameTime += Time.deltaTime;
+            if (GameManager.Instance != null)
+            {
+                currentWave = GameManager.Instance.CurrentWave;
+                waveTimer = GameManager.Instance.WaveTimer;
+                currentWaveState = GameManager.Instance.CurrentWaveState;
+                
+                UpdateWaveUI();
+                UpdateWaveTimerUI();
+                UpdateWaveStateUI();
+            }
         }
 
         /// <summary>
-        /// UI 업데이트
+        /// 웨이브 변경 이벤트 핸들러
         /// </summary>
-        private void UpdateUI()
+        /// <param name="waveNumber">새로운 웨이브 번호</param>
+        private void OnWaveChanged(int waveNumber)
         {
-            UpdateKillCountUI();
+            currentWave = waveNumber;
             UpdateWaveUI();
-            UpdateTimeUI();
+        }
+
+        /// <summary>
+        /// 웨이브 타이머 업데이트 이벤트 핸들러
+        /// </summary>
+        /// <param name="remainingTime">남은 시간</param>
+        private void OnWaveTimerUpdated(float remainingTime)
+        {
+            waveTimer = remainingTime;
+            UpdateWaveTimerUI();
+        }
+
+        /// <summary>
+        /// 웨이브 상태 변경 이벤트 핸들러
+        /// </summary>
+        /// <param name="waveState">새로운 웨이브 상태</param>
+        private void OnWaveStateChanged(WaveState waveState)
+        {
+            currentWaveState = waveState;
+            UpdateWaveStateUI();
         }
 
         /// <summary>
@@ -127,22 +178,61 @@ namespace MagicBattle.UI
         {
             if (waveText != null)
             {
-                // 게임 시간을 기반으로 웨이브 계산 (30초마다 웨이브 증가)
-                int currentWave = Mathf.FloorToInt(gameTime / 30f) + 1;
                 waveText.text = $"웨이브: {currentWave}";
             }
         }
 
         /// <summary>
-        /// 시간 UI 업데이트
+        /// 웨이브 타이머 UI 업데이트 (카운트다운)
         /// </summary>
-        private void UpdateTimeUI()
+        private void UpdateWaveTimerUI()
         {
-            if (timeText != null)
+            if (waveTimerText != null)
             {
-                int minutes = Mathf.FloorToInt(gameTime / 60f);
-                int seconds = Mathf.FloorToInt(gameTime % 60f);
-                timeText.text = $"{minutes:D2}:{seconds:D2}";
+                int seconds = Mathf.CeilToInt(Mathf.Max(0f, waveTimer));
+                waveTimerText.text = $"시간: {seconds}";
+                
+                // 10초 이하일 때 빨간색으로 표시
+                if (seconds <= 10)
+                {
+                    waveTimerText.color = Color.red;
+                }
+                else if (seconds <= 20)
+                {
+                    waveTimerText.color = Color.yellow;
+                }
+                else
+                {
+                    waveTimerText.color = Color.white;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 웨이브 상태 UI 업데이트 (선택적)
+        /// </summary>
+        private void UpdateWaveStateUI()
+        {
+            if (waveStateText != null)
+            {
+                string stateText = currentWaveState switch
+                {
+                    WaveState.Spawning => "몬스터 출현",
+                    WaveState.Rest => "휴식 시간",
+                    WaveState.WaveCompleted => "웨이브 완료",
+                    _ => "알 수 없음"
+                };
+                
+                waveStateText.text = stateText;
+                
+                // 상태별 색상 변경
+                waveStateText.color = currentWaveState switch
+                {
+                    WaveState.Spawning => Color.red,
+                    WaveState.Rest => Color.green,
+                    WaveState.WaveCompleted => Color.cyan,
+                    _ => Color.white
+                };
             }
         }
 
@@ -171,7 +261,6 @@ namespace MagicBattle.UI
         private void OnPlayerDeath()
         {
             Debug.Log("플레이어가 사망했습니다!");
-            // TODO: 게임 오버 UI 표시
             ShowGameOverUI();
         }
 
@@ -180,20 +269,13 @@ namespace MagicBattle.UI
         /// </summary>
         private void ShowGameOverUI()
         {
-            // 간단한 게임 오버 메시지
-            if (timeText != null)
-            {
-                int minutes = Mathf.FloorToInt(gameTime / 60f);
-                int seconds = Mathf.FloorToInt(gameTime % 60f);
-                int wave = Mathf.FloorToInt(gameTime / 30f) + 1;
-                
-                string gameOverMessage = $"게임 오버!\n" +
-                                       $"생존 시간: {minutes:D2}:{seconds:D2}\n" +
-                                       $"도달 웨이브: {wave}\n" +
-                                       $"몬스터 처치: {GameManager.Instance?.TotalMonstersKilled ?? 0}";
-                
-                Debug.Log(gameOverMessage);
-            }
+            // 게임 오버 정보 생성
+            string gameOverMessage = $"게임 오버!\n" +
+                                   $"도달 웨이브: {currentWave}\n" +
+                                   $"몬스터 처치: {GameManager.Instance?.TotalMonstersKilled ?? 0}";
+            
+            Debug.Log(gameOverMessage);
+            // TODO: 실제 게임 오버 UI 패널 표시
         }
 
         /// <summary>
@@ -206,30 +288,38 @@ namespace MagicBattle.UI
         }
 
         /// <summary>
-        /// 현재 게임 시간 반환
-        /// </summary>
-        /// <returns>게임 시간 (초)</returns>
-        public float GetGameTime()
-        {
-            return gameTime;
-        }
-
-        /// <summary>
         /// 현재 웨이브 반환
         /// </summary>
         /// <returns>현재 웨이브</returns>
         public int GetCurrentWave()
         {
-            return Mathf.FloorToInt(gameTime / 30f) + 1;
+            return currentWave;
+        }
+
+        /// <summary>
+        /// 웨이브 남은 시간 반환
+        /// </summary>
+        /// <returns>웨이브 남은 시간</returns>
+        public float GetWaveTimer()
+        {
+            return waveTimer;
         }
 
         private void OnDestroy()
         {
-            // 이벤트 구독 해제
+            // PlayerStats 이벤트 구독 해제
             if (playerStats != null)
             {
                 playerStats.OnHealthChanged.RemoveListener(UpdateHealthUI);
                 playerStats.OnPlayerDeath.RemoveListener(OnPlayerDeath);
+            }
+
+            // GameManager 이벤트 구독 해제
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnWaveChanged.RemoveListener(OnWaveChanged);
+                GameManager.Instance.OnWaveTimerUpdated.RemoveListener(OnWaveTimerUpdated);
+                GameManager.Instance.OnWaveStateChanged.RemoveListener(OnWaveStateChanged);
             }
         }
     }

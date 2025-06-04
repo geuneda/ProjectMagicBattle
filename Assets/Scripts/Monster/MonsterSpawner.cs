@@ -6,32 +6,27 @@ using MagicBattle.Managers;
 namespace MagicBattle.Monster
 {
     /// <summary>
-    /// 몬스터 스포너 시스템
-    /// 일정 간격으로 몬스터를 생성하고 관리
+    /// 몬스터 스포너 시스템 (웨이브 기반)
+    /// GameManager의 웨이브 시스템과 연동하여 몬스터를 생성
     /// </summary>
     public class MonsterSpawner : MonoBehaviour
     {
         [Header("스폰 설정")]
         [SerializeField] private GameObject monsterPrefab;
-        [SerializeField] private float spawnInterval = Constants.MONSTER_SPAWN_INTERVAL;
         [SerializeField] private Vector3 spawnAreaCenter = new Vector3(0f, -4f, 0f);
         [SerializeField] private Vector2 spawnAreaSize = new Vector2(8f, 1f);
-
-        [Header("난이도 설정")]
-        [SerializeField] private float difficultyIncreaseRate = 0.1f; // 10%씩 증가
-        [SerializeField] private float difficultyIncreaseInterval = 30f; // 30초마다 증가
-        [SerializeField] private float minSpawnInterval = 0.5f; // 최소 스폰 간격
-        [SerializeField] private float maxDifficultyMultiplier = 3f; // 최대 난이도 배수
 
         [Header("몬스터 풀링")]
         [SerializeField] private bool useObjectPooling = true;
         [SerializeField] private string poolTag = "Monster";
-        [SerializeField] private int initialPoolSize = 20;
+        [SerializeField] private int initialPoolSize = 30; // 웨이브당 최대 20마리이므로 30개로 증가
+
+        [Header("웨이브 상태 표시 (읽기 전용)")]
+        [SerializeField] private int currentWave = 1;
+        [SerializeField] private WaveState currentWaveState = WaveState.Spawning;
+        [SerializeField] private float waveDifficultyMultiplier = 1f;
 
         // 스폰 관련 변수
-        private Coroutine spawnCoroutine;
-        private Coroutine difficultyCoroutine;
-        private float currentDifficultyMultiplier = 1f;
         private int totalMonstersSpawned = 0;
 
         // 컴포넌트 참조
@@ -40,12 +35,12 @@ namespace MagicBattle.Monster
         private void Start()
         {
             InitializeSpawner();
-            StartSpawning();
+            SubscribeToWaveEvents();
         }
 
         private void OnDestroy()
         {
-            StopSpawning();
+            UnsubscribeFromWaveEvents();
         }
 
         /// <summary>
@@ -61,80 +56,95 @@ namespace MagicBattle.Monster
                 PoolManager.Instance.AddPool(poolTag, monsterPrefab, initialPoolSize);
             }
 
-            Debug.Log("MonsterSpawner 초기화 완료");
+            Debug.Log("MonsterSpawner 초기화 완료 (웨이브 기반)");
         }
 
         /// <summary>
-        /// 스폰 시작
+        /// 웨이브 이벤트 구독
         /// </summary>
-        public void StartSpawning()
+        private void SubscribeToWaveEvents()
         {
-            StopSpawning(); // 기존 코루틴 정리
-
-            if (GameManager.Instance != null && GameManager.Instance.IsGamePlaying)
+            if (GameManager.Instance != null)
             {
-                spawnCoroutine = StartCoroutine(SpawnCoroutine());
-                difficultyCoroutine = StartCoroutine(DifficultyIncreaseCoroutine());
+                GameManager.Instance.OnMonsterShouldSpawn.AddListener(SpawnMonster);
+                GameManager.Instance.OnWaveChanged.AddListener(OnWaveChanged);
+                GameManager.Instance.OnWaveStateChanged.AddListener(OnWaveStateChanged);
+                
+                // 현재 웨이브 정보 동기화
+                UpdateWaveInfo();
+                
+                Debug.Log("웨이브 이벤트 구독 완료");
+            }
+            else
+            {
+                Debug.LogError("GameManager.Instance가 null입니다!");
             }
         }
 
         /// <summary>
-        /// 스폰 중지
+        /// 웨이브 이벤트 구독 해제
         /// </summary>
-        public void StopSpawning()
+        private void UnsubscribeFromWaveEvents()
         {
-            if (spawnCoroutine != null)
+            if (GameManager.Instance != null)
             {
-                StopCoroutine(spawnCoroutine);
-                spawnCoroutine = null;
-            }
-
-            if (difficultyCoroutine != null)
-            {
-                StopCoroutine(difficultyCoroutine);
-                difficultyCoroutine = null;
+                GameManager.Instance.OnMonsterShouldSpawn.RemoveListener(SpawnMonster);
+                GameManager.Instance.OnWaveChanged.RemoveListener(OnWaveChanged);
+                GameManager.Instance.OnWaveStateChanged.RemoveListener(OnWaveStateChanged);
             }
         }
 
         /// <summary>
-        /// 스폰 코루틴
+        /// 웨이브 변경 이벤트 핸들러
         /// </summary>
-        private IEnumerator SpawnCoroutine()
+        /// <param name="waveNumber">새로운 웨이브 번호</param>
+        private void OnWaveChanged(int waveNumber)
         {
-            while (true)
-            {
-                // 게임이 진행 중일 때만 스폰
-                if (GameManager.Instance != null && GameManager.Instance.IsGamePlaying)
-                {
-                    SpawnMonster();
-                }
-
-                yield return new WaitForSeconds(GetCurrentSpawnInterval());
-            }
+            currentWave = waveNumber;
+            UpdateWaveInfo();
+            Debug.Log($"몬스터 스포너: 웨이브 {waveNumber} 시작");
         }
 
         /// <summary>
-        /// 난이도 증가 코루틴
+        /// 웨이브 상태 변경 이벤트 핸들러
         /// </summary>
-        private IEnumerator DifficultyIncreaseCoroutine()
+        /// <param name="waveState">새로운 웨이브 상태</param>
+        private void OnWaveStateChanged(WaveState waveState)
         {
-            while (true)
+            currentWaveState = waveState;
+            
+            switch (waveState)
             {
-                yield return new WaitForSeconds(difficultyIncreaseInterval);
-
-                if (currentDifficultyMultiplier < maxDifficultyMultiplier)
-                {
-                    currentDifficultyMultiplier += difficultyIncreaseRate;
-                    Debug.Log($"난이도 증가! 현재 배수: {currentDifficultyMultiplier:F2}");
-                }
+                case WaveState.Spawning:
+                    Debug.Log($"웨이브 {currentWave}: 몬스터 스폰 시작");
+                    break;
+                case WaveState.Rest:
+                    Debug.Log($"웨이브 {currentWave}: 휴식 시간 시작");
+                    break;
             }
         }
 
         /// <summary>
-        /// 몬스터 스폰
+        /// 웨이브 정보 업데이트
+        /// </summary>
+        private void UpdateWaveInfo()
+        {
+            if (GameManager.Instance != null)
+            {
+                currentWave = GameManager.Instance.CurrentWave;
+                currentWaveState = GameManager.Instance.CurrentWaveState;
+                waveDifficultyMultiplier = GameManager.Instance.WaveDifficultyMultiplier;
+            }
+        }
+
+        /// <summary>
+        /// 몬스터 스폰 (GameManager 요청 시에만 호출)
         /// </summary>
         private void SpawnMonster()
         {
+            // 스폰 상태일 때만 스폰
+            if (currentWaveState != WaveState.Spawning) return;
+
             Vector3 spawnPosition = spawnAreaCenter;
             GameObject monster = null;
 
@@ -153,11 +163,12 @@ namespace MagicBattle.Monster
             {
                 ConfigureMonster(monster);
                 totalMonstersSpawned++;
+                
+                Debug.Log($"웨이브 {currentWave}: 몬스터 스폰됨 (총 {totalMonstersSpawned}마리)");
             }
         }
-
         /// <summary>
-        /// 몬스터 설정 적용
+        /// 몬스터 설정 적용 (웨이브 난이도 반영)
         /// </summary>
         /// <param name="monster">설정할 몬스터</param>
         private void ConfigureMonster(GameObject monster)
@@ -165,10 +176,10 @@ namespace MagicBattle.Monster
             var monsterController = monster.GetComponent<MonsterController>();
             if (monsterController != null)
             {
-                // 난이도에 따른 몬스터 강화
-                float healthMultiplier = 1f + (currentDifficultyMultiplier - 1f) * 0.8f;
-                float damageMultiplier = 1f + (currentDifficultyMultiplier - 1f) * 0.6f;
-                float speedMultiplier = 1f + (currentDifficultyMultiplier - 1f) * 0.3f;
+                // 웨이브 난이도에 따른 몬스터 강화
+                float healthMultiplier = waveDifficultyMultiplier * 0.8f + 0.2f; // 체력: 20% + 웨이브당 80%
+                float damageMultiplier = waveDifficultyMultiplier * 0.6f + 0.4f; // 데미지: 40% + 웨이브당 60%
+                float speedMultiplier = waveDifficultyMultiplier * 0.3f + 0.7f; // 속도: 70% + 웨이브당 30%
 
                 monsterController.EnhanceMonster(healthMultiplier, damageMultiplier, speedMultiplier);
 
@@ -181,38 +192,10 @@ namespace MagicBattle.Monster
         }
 
         /// <summary>
-        /// 현재 스폰 간격 계산
-        /// </summary>
-        /// <returns>현재 스폰 간격</returns>
-        private float GetCurrentSpawnInterval()
-        {
-            float adjustedInterval = spawnInterval / currentDifficultyMultiplier;
-            return Mathf.Max(adjustedInterval, minSpawnInterval);
-        }
-
-        /// <summary>
-        /// 스폰 간격 설정
-        /// </summary>
-        /// <param name="newInterval">새로운 스폰 간격</param>
-        public void SetSpawnInterval(float newInterval)
-        {
-            spawnInterval = Mathf.Max(0.1f, newInterval);
-        }
-
-        /// <summary>
-        /// 난이도 배수 설정
-        /// </summary>
-        /// <param name="multiplier">난이도 배수</param>
-        public void SetDifficultyMultiplier(float multiplier)
-        {
-            currentDifficultyMultiplier = Mathf.Clamp(multiplier, 1f, maxDifficultyMultiplier);
-        }
-
-        /// <summary>
         /// 스폰 영역 설정
         /// </summary>
         /// <param name="center">중심점</param>
-        /// <param name="size">크기</param>
+        /// <param name="size">영역 크기</param>
         public void SetSpawnArea(Vector3 center, Vector2 size)
         {
             spawnAreaCenter = center;
@@ -220,15 +203,16 @@ namespace MagicBattle.Monster
         }
 
         /// <summary>
-        /// 즉시 몬스터 스폰 (테스트용)
+        /// 수동 몬스터 스폰 (테스트용)
         /// </summary>
+        [ContextMenu("테스트: 몬스터 즉시 스폰")]
         public void SpawnMonsterNow()
         {
             SpawnMonster();
         }
 
         /// <summary>
-        /// 스폰 통계 정보 가져오기
+        /// 총 스폰된 몬스터 수 반환
         /// </summary>
         /// <returns>총 스폰된 몬스터 수</returns>
         public int GetTotalSpawnedCount()
@@ -237,66 +221,41 @@ namespace MagicBattle.Monster
         }
 
         /// <summary>
-        /// 스폰 리셋 (게임 재시작 시 사용)
+        /// 스포너 리셋
         /// </summary>
         public void ResetSpawner()
         {
             totalMonstersSpawned = 0;
-            currentDifficultyMultiplier = 1f;
+            currentWave = 1;
+            currentWaveState = WaveState.Spawning;
+            waveDifficultyMultiplier = 1f;
             
-            StopSpawning();
-            StartSpawning();
+            UpdateWaveInfo();
+            Debug.Log("MonsterSpawner가 리셋되었습니다.");
         }
 
-        #region 기즈모 및 디버깅
+        /// <summary>
+        /// 스폰 영역 시각화 (Gizmo)
+        /// </summary>
         private void OnDrawGizmosSelected()
         {
-            // 스폰 영역 시각화
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireCube(spawnAreaCenter, new Vector3(spawnAreaSize.x, spawnAreaSize.y, 0f));
-
-            // 스폰 중심점 표시
             Gizmos.color = Color.red;
+            Gizmos.DrawWireCube(spawnAreaCenter, new Vector3(spawnAreaSize.x, spawnAreaSize.y, 0.1f));
+            
+            // 스폰 중심점 표시
+            Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(spawnAreaCenter, 0.2f);
         }
 
-#if UNITY_EDITOR
-        [ContextMenu("테스트: 몬스터 즉시 스폰")]
-        private void TestSpawnMonster()
-        {
-            SpawnMonsterNow();
-        }
-
-        [ContextMenu("테스트: 난이도 증가")]
-        private void TestIncreaseDifficulty()
-        {
-            SetDifficultyMultiplier(currentDifficultyMultiplier + 0.5f);
-            Debug.Log($"난이도 수동 증가: {currentDifficultyMultiplier}");
-        }
-
-        [ContextMenu("테스트: 스포너 리셋")]
-        private void TestResetSpawner()
-        {
-            ResetSpawner();
-        }
-
-        // Inspector에서 현재 상태 확인용
-        [Space]
-        [Header("디버그 정보 (읽기 전용)")]
-        [SerializeField] private float currentSpawnInterval;
-        [SerializeField] private float debugDifficultyMultiplier;
-        [SerializeField] private int debugTotalSpawned;
-
+        /// <summary>
+        /// Inspector에서 웨이브 정보 동기화 (에디터용)
+        /// </summary>
         private void OnValidate()
         {
-            if (Application.isPlaying)
+            if (Application.isPlaying && GameManager.Instance != null)
             {
-                currentSpawnInterval = GetCurrentSpawnInterval();
-                debugDifficultyMultiplier = currentDifficultyMultiplier;
-                debugTotalSpawned = totalMonstersSpawned;
+                UpdateWaveInfo();
             }
         }
-#endif
-        #endregion
     }
 } 

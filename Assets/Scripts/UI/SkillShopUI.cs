@@ -48,12 +48,12 @@ namespace MagicBattle.UI
 
         private void Awake()
         {
-            InitializeComponents();
-            SetupButtonEvents();
         }
 
         private void Start()
         {
+            InitializeComponents();
+            SetupButtonEvents();
             InitializeShop();
             UpdateUI();
         }

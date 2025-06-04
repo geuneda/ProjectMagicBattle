@@ -28,6 +28,6 @@ MonoBehaviour:
   isPiercing: 1
   maxTargets: 5
   castEffect: {fileID: 0}
-  hitEffect: {fileID: 0}
+  hitEffect: {fileID: 8771972552311404799, guid: bbf9e36a48d6c5648a13889afab076fd, type: 3}
   castSound: {fileID: 0}
   hitSound: {fileID: 0}

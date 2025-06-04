@@ -216,15 +216,6 @@ namespace MagicBattle.UI
         }
 
         /// <summary>
-        /// 현재 게임 시간 반환
-        /// </summary>
-        /// <returns>게임 시간 (초)</returns>
-        public float GetGameTime()
-        {
-            return mainGameUI != null ? mainGameUI.GetGameTime() : 0f;
-        }
-
-        /// <summary>
         /// 현재 웨이브 반환
         /// </summary>
         /// <returns>현재 웨이브</returns>

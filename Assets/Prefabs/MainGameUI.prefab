@@ -854,7 +854,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   killCountText: {fileID: 8344197833417246813}
   waveText: {fileID: 4896931293782025953}
-  timeText: {fileID: 8231532757531186862}
+  waveTimerText: {fileID: 8231532757531186862}
+  waveStateText: {fileID: 0}
   healthSlider: {fileID: 2997187594358152564}
   healthText: {fileID: 5943600458864665992}
 --- !u!1 &8394433453028859197

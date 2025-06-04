@@ -6,6 +6,16 @@ using MagicBattle.Player;
 namespace MagicBattle.Managers
 {
     /// <summary>
+    /// 웨이브 상태를 나타내는 열거형
+    /// </summary>
+    public enum WaveState
+    {
+        Spawning,    // 몬스터 스폰 중 (20초)
+        Rest,        // 휴식 시간 (10초)
+        WaveCompleted // 웨이브 완료
+    }
+
+    /// <summary>
     /// 게임의 전체적인 상태와 플로우를 관리하는 매니저
     /// </summary>
     public class GameManager : MonoBehaviour
@@ -13,6 +23,14 @@ namespace MagicBattle.Managers
         [Header("게임 설정")]
         [SerializeField] private GameState currentGameState = GameState.Playing;
         [SerializeField] private float gameSpeed = Constants.GAME_SPEED_NORMAL;
+
+        [Header("웨이브 시스템")]
+        [SerializeField] private int currentWave = 1;
+        [SerializeField] private WaveState currentWaveState = WaveState.Spawning;
+        [SerializeField] private float waveTimer = 30f; // 웨이브 남은 시간 (30초부터 카운트다운)
+        [SerializeField] private float spawnDuration = 20f; // 스폰 지속 시간
+        [SerializeField] private float restDuration = 10f; // 휴식 시간
+        [SerializeField] private int monstersPerWave = 20; // 웨이브당 몬스터 수
 
         [Header("플레이어 참조")]
         [SerializeField] private PlayerController playerController;
@@ -22,14 +40,24 @@ namespace MagicBattle.Managers
         [SerializeField] private int totalMonstersKilled = 0;
         private int currentGold = 1000;
 
+        // 웨이브 관련 내부 변수
+        private float waveStateTimer = 0f; // 현재 웨이브 상태의 타이머
+        private int monstersSpawnedThisWave = 0; // 현재 웨이브에서 스폰된 몬스터 수
+
         // 싱글톤 패턴
         public static GameManager Instance { get; private set; }
 
-        // 이벤트
+        // 기존 이벤트
         public UnityEvent<GameState> OnGameStateChanged;
         public UnityEvent OnGameOver;
         public UnityEvent<int> OnGoldChanged; // 골드 변화
         public UnityEvent<int> OnMonsterKilled; // 몬스터 처치
+
+        // 웨이브 이벤트
+        public UnityEvent<int> OnWaveChanged; // 웨이브 변경 (웨이브 번호)
+        public UnityEvent<WaveState> OnWaveStateChanged; // 웨이브 상태 변경
+        public UnityEvent<float> OnWaveTimerUpdated; // 웨이브 타이머 업데이트 (남은 시간)
+        public UnityEvent OnMonsterShouldSpawn; // 몬스터 스폰 요청
 
         // 프로퍼티
         public GameState CurrentGameState => currentGameState;
@@ -38,6 +66,14 @@ namespace MagicBattle.Managers
         public int CurrentGold => currentGold;
         public PlayerController Player => playerController;
         public bool IsGamePlaying => currentGameState == GameState.Playing;
+
+        // 웨이브 관련 프로퍼티
+        public int CurrentWave => currentWave;
+        public WaveState CurrentWaveState => currentWaveState;
+        public float WaveTimer => waveTimer;
+        public int MonstersSpawnedThisWave => monstersSpawnedThisWave;
+        public int MonstersPerWave => monstersPerWave;
+        public float WaveDifficultyMultiplier => 1f + (currentWave - 1) * 0.2f; // 웨이브당 20% 증가
 
         private void Awake()
         {
@@ -65,6 +101,7 @@ namespace MagicBattle.Managers
             if (currentGameState == GameState.Playing)
             {
                 gameTime += Time.deltaTime;
+                UpdateWaveSystem();
             }
         }
 
@@ -93,6 +130,9 @@ namespace MagicBattle.Managers
             ChangeGameState(GameState.Playing);
             gameTime = 0f;
             totalMonstersKilled = 0;
+
+            // 웨이브 시스템 초기화
+            ResetWaveSystem();
 
             // 플레이어 이벤트 구독
             if (playerController != null && playerController.Stats != null)
@@ -190,6 +230,9 @@ namespace MagicBattle.Managers
             totalMonstersKilled = 0;
             currentGold = 0;
 
+            // 웨이브 시스템 리셋
+            ResetWaveSystem();
+
             // UI 업데이트
             OnGoldChanged?.Invoke(currentGold);
 
@@ -197,6 +240,123 @@ namespace MagicBattle.Managers
             StartGame();
 
             Debug.Log("게임이 재시작되었습니다!");
+        }
+
+        /// <summary>
+        /// 웨이브 시스템 업데이트
+        /// </summary>
+        private void UpdateWaveSystem()
+        {
+            // 웨이브 타이머 감소
+            waveTimer -= Time.deltaTime;
+            waveStateTimer += Time.deltaTime;
+
+            OnWaveTimerUpdated?.Invoke(waveTimer);
+
+            switch (currentWaveState)
+            {
+                case WaveState.Spawning:
+                    UpdateSpawningState();
+                    break;
+                case WaveState.Rest:
+                    UpdateRestState();
+                    break;
+            }
+
+            // 웨이브 타이머가 0에 도달하면 다음 웨이브로 진행
+            if (waveTimer <= 0f)
+            {
+                StartNextWave();
+            }
+        }
+
+        /// <summary>
+        /// 스폰 상태 업데이트
+        /// </summary>
+        private void UpdateSpawningState()
+        {
+            // 1초마다 몬스터 스폰 (20초 동안)
+            if (waveStateTimer >= 1f && monstersSpawnedThisWave < monstersPerWave)
+            {
+                waveStateTimer = 0f;
+                monstersSpawnedThisWave++;
+                OnMonsterShouldSpawn?.Invoke();
+                
+                Debug.Log($"웨이브 {currentWave}: 몬스터 스폰 ({monstersSpawnedThisWave}/{monstersPerWave})");
+            }
+
+            // 20초가 지나거나 모든 몬스터를 스폰했으면 휴식 상태로 전환
+            if (waveStateTimer >= spawnDuration || monstersSpawnedThisWave >= monstersPerWave)
+            {
+                ChangeWaveState(WaveState.Rest);
+            }
+        }
+
+        /// <summary>
+        /// 휴식 상태 업데이트
+        /// </summary>
+        private void UpdateRestState()
+        {
+            // 휴식 시간은 자동으로 waveTimer가 0이 되면 다음 웨이브로 진행됨
+            // 특별한 로직 없이 대기
+        }
+
+        /// <summary>
+        /// 웨이브 상태 변경
+        /// </summary>
+        /// <param name="newState">새로운 웨이브 상태</param>
+        private void ChangeWaveState(WaveState newState)
+        {
+            if (currentWaveState == newState) return;
+
+            WaveState previousState = currentWaveState;
+            currentWaveState = newState;
+            waveStateTimer = 0f; // 상태 타이머 리셋
+
+            OnWaveStateChanged?.Invoke(newState);
+            
+            Debug.Log($"웨이브 {currentWave} 상태 변경: {previousState} → {newState}");
+        }
+
+        /// <summary>
+        /// 다음 웨이브 시작
+        /// </summary>
+        private void StartNextWave()
+        {
+            currentWave++;
+            waveTimer = spawnDuration + restDuration; // 30초로 리셋
+            monstersSpawnedThisWave = 0;
+            
+            ChangeWaveState(WaveState.Spawning);
+            OnWaveChanged?.Invoke(currentWave);
+            
+            Debug.Log($"웨이브 {currentWave} 시작! (난이도 배수: {WaveDifficultyMultiplier:F1}x)");
+        }
+
+        /// <summary>
+        /// 웨이브 시스템 리셋
+        /// </summary>
+        private void ResetWaveSystem()
+        {
+            currentWave = 1;
+            waveTimer = spawnDuration + restDuration; // 30초
+            waveStateTimer = 0f;
+            monstersSpawnedThisWave = 0;
+            currentWaveState = WaveState.Spawning;
+            
+            // 이벤트 발생
+            OnWaveChanged?.Invoke(currentWave);
+            OnWaveStateChanged?.Invoke(currentWaveState);
+            OnWaveTimerUpdated?.Invoke(waveTimer);
+        }
+
+        /// <summary>
+        /// 수동으로 다음 웨이브 시작 (치트용)
+        /// </summary>
+        [ContextMenu("테스트: 다음 웨이브 시작")]
+        public void ForceNextWave()
+        {
+            StartNextWave();
         }
 
         #region 골드 시스템
