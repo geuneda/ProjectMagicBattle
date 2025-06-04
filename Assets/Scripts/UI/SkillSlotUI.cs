@@ -43,8 +43,6 @@ namespace MagicBattle.UI
         private bool canSynthesize = false;
         private bool isSelected = false;
         private bool hasBeenClicked = false; // 한 번이라도 클릭되었는지 추적
-        private float lastClickTime = 0f;
-        private const float DOUBLE_CLICK_TIME = 0.5f;
 
         private void Awake()
         {
@@ -322,18 +320,26 @@ namespace MagicBattle.UI
                 UpdateSynthesisUI(); // 화살표 표시를 위해 UI 업데이트
             }
 
-            float currentTime = Time.time;
-            bool isDoubleClick = (currentTime - lastClickTime) < DOUBLE_CLICK_TIME && isSelected;
-            lastClickTime = currentTime;
-
-            if (canSynthesize && isDoubleClick)
+            // 이미 선택된 슬롯을 다시 클릭한 경우
+            if (isSelected)
             {
-                // 더블 클릭 + 합성 가능한 경우 → 바로 합성 실행
-                PerformSynthesis();
+                // 합성 가능한 경우 바로 합성 실행
+                if (canSynthesize)
+                {
+                    PerformSynthesis();
+                }
+                else
+                {
+                    // 합성이 불가능한 경우 정보 패널만 다시 표시
+                    if (parentShop != null)
+                    {
+                        parentShop.ShowSkillInfoPanel(skillData);
+                    }
+                }
             }
             else
             {
-                // 첫 번째 클릭 → 선택 + 정보 패널 표시
+                // 처음 선택하는 경우 → 선택 + 정보 패널 표시
                 SelectThisSlot();
                 if (parentShop != null)
                 {
