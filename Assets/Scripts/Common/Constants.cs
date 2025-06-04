@@ -11,7 +11,7 @@ namespace MagicBattle.Common
         public const float PLAYER_BASIC_ATTACK_DAMAGE = 10f;
         public const float PLAYER_BASIC_ATTACK_COOLDOWN = 1f;
         public const float PLAYER_BASIC_ATTACK_RANGE = 2f;
-        public const float PLAYER_MAX_HEALTH = 100f;
+        public const float PLAYER_MAX_HEALTH = 1000f;
         #endregion
 
         #region 몬스터 관련 상수

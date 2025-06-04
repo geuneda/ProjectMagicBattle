@@ -228,6 +228,79 @@ namespace MagicBattle.Player
         }
 
         /// <summary>
+        /// 수동 스킬 합성 (UI에서 사용)
+        /// </summary>
+        /// <param name="skillData">합성할 스킬</param>
+        /// <returns>합성 성공 여부</returns>
+        public bool SynthesizeSkill(SkillData skillData)
+        {
+            if (skillData == null) return false;
+
+            string skillID = skillData.GetSkillID();
+            int currentStack = GetSkillStack(skillData);
+
+            // 합성 조건 확인
+            if (currentStack < Constants.SKILL_UPGRADE_REQUIRED_COUNT || skillData.Grade >= SkillGrade.Grade3)
+            {
+                Debug.Log($"스킬 {skillData.SkillName} 합성 조건이 충족되지 않았습니다.");
+                return false;
+            }
+
+            // 상위 등급 스킬 ID 생성
+            SkillGrade nextGrade = (SkillGrade)((int)skillData.Grade + 1);
+            string nextGradeSkillID = $"{skillData.Attribute}_{nextGrade}";
+
+            // 상위 등급 스킬이 존재하는지 확인
+            if (!skillDataMap.ContainsKey(nextGradeSkillID))
+            {
+                Debug.LogError($"상위 등급 스킬을 찾을 수 없습니다: {nextGradeSkillID}");
+                return false;
+            }
+
+            // 현재 스킬 스택에서 3개 제거
+            ownedSkills[skillID] -= Constants.SKILL_UPGRADE_REQUIRED_COUNT;
+            if (ownedSkills[skillID] <= 0)
+            {
+                ownedSkills.Remove(skillID);
+            }
+
+            // 상위 등급 스킬 획득
+            SkillData upgradedSkill = skillDataMap[nextGradeSkillID];
+            if (ownedSkills.ContainsKey(nextGradeSkillID))
+            {
+                ownedSkills[nextGradeSkillID]++;
+            }
+            else
+            {
+                ownedSkills.Add(nextGradeSkillID, 1);
+            }
+
+            Debug.Log($"수동 스킬 합성 완료: {skillData.SkillName} -> {upgradedSkill.SkillName}");
+            
+            // 이벤트 발생
+            OnSkillUpgraded?.Invoke(upgradedSkill);
+            OnSkillAcquired?.Invoke(upgradedSkill, ownedSkills[nextGradeSkillID]);
+
+            return true;
+        }
+
+        /// <summary>
+        /// 스킬 합성 가능 여부 확인
+        /// </summary>
+        /// <param name="skillData">확인할 스킬</param>
+        /// <returns>합성 가능 여부</returns>
+        public bool CanSynthesizeSkill(SkillData skillData)
+        {
+            if (skillData == null) return false;
+
+            int currentStack = GetSkillStack(skillData);
+            bool hasRequiredStack = currentStack >= Constants.SKILL_UPGRADE_REQUIRED_COUNT;
+            bool canUpgrade = skillData.Grade < SkillGrade.Grade3;
+
+            return hasRequiredStack && canUpgrade;
+        }
+
+        /// <summary>
         /// 특정 속성의 스킬 개수 반환
         /// </summary>
         /// <param name="attribute">스킬 속성</param>
