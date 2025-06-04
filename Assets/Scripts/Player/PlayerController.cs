@@ -1,5 +1,6 @@
 using UnityEngine;
 using MagicBattle.Common;
+using MagicBattle.Skills;
 
 namespace MagicBattle.Player
 {
@@ -12,7 +13,7 @@ namespace MagicBattle.Player
         [Header("컴포넌트 참조")]
         [SerializeField] private PlayerStats playerStats;
         [SerializeField] private PlayerAttack playerAttack;
-        // [SerializeField] private PlayerSkillManager playerSkillManager; // 나중에 추가
+        [SerializeField] private PlayerSkillManager playerSkillManager;
 
         [Header("시각적 요소")]
         [SerializeField] private SpriteRenderer spriteRenderer;
@@ -59,6 +60,7 @@ namespace MagicBattle.Player
             // 필수 컴포넌트들을 자동으로 가져오거나 추가
             playerStats = Utilities.GetOrAddComponent<PlayerStats>(gameObject);
             playerAttack = Utilities.GetOrAddComponent<PlayerAttack>(gameObject);
+            playerSkillManager = Utilities.GetOrAddComponent<PlayerSkillManager>(gameObject);
             
             // 시각적 컴포넌트들
             spriteRenderer = GetComponent<SpriteRenderer>();

@@ -182,6 +182,11 @@ namespace MagicBattle.Managers
             {
                 ResetMonsterForPool(objectToReturn);
             }
+            // 투사체인 경우 리셋 처리
+            else if (objectToReturn.CompareTag("Projectile"))
+            {
+                ResetProjectileForPool(objectToReturn);
+            }
 
             objectToReturn.SetActive(false);
             
@@ -215,6 +220,38 @@ namespace MagicBattle.Managers
 
             // 실행 중인 모든 코루틴 정지
             var monoBehaviours = monster.GetComponents<MonoBehaviour>();
+            foreach (var mb in monoBehaviours)
+            {
+                if (mb != null)
+                {
+                    mb.StopAllCoroutines();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 투사체를 풀로 반환하기 전 리셋 처리
+        /// </summary>
+        /// <param name="projectile">리셋할 투사체 오브젝트</param>
+        private void ResetProjectileForPool(GameObject projectile)
+        {
+            // 투사체 스크립트의 리셋 메서드 호출
+            var projectileScript = projectile.GetComponent<MagicBattle.Skills.Projectile>();
+            if (projectileScript != null)
+            {
+                projectileScript.ResetForPool();
+            }
+
+            // Rigidbody2D 속도 리셋
+            var rb = projectile.GetComponent<Rigidbody2D>();
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector2.zero;
+                rb.angularVelocity = 0f;
+            }
+
+            // 실행 중인 모든 코루틴 정지
+            var monoBehaviours = projectile.GetComponents<MonoBehaviour>();
             foreach (var mb in monoBehaviours)
             {
                 if (mb != null)
