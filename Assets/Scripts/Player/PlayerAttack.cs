@@ -163,11 +163,10 @@ namespace MagicBattle.Player
             if (target == null) return;
 
             // 몬스터의 체력 시스템에 데미지 적용
-            var monsterStats = target.GetComponent<MonoBehaviour>();
+            var monsterStats = target.GetComponent<MagicBattle.Monster.MonsterStats>();
             if (monsterStats != null)
             {
-                // 나중에 몬스터 시스템 구현 시 연결될 부분
-                // monsterStats.TakeDamage(playerStats.BasicAttackDamage);
+                monsterStats.TakeDamage(playerStats.BasicAttackDamage);
                 Debug.Log($"몬스터에게 {playerStats.BasicAttackDamage} 데미지를 입혔습니다!");
             }
         }

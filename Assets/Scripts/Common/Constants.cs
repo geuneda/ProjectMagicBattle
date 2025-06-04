@@ -55,6 +55,12 @@ namespace MagicBattle.Common
         public const int SKILL_EFFECT_LAYER = 10;
         #endregion
 
+        #region 오브젝트 풀 태그
+        public const string MONSTER_POOL_TAG = "Monster";
+        public const string SKILL_EFFECT_POOL_TAG = "SkillEffect";
+        public const string PROJECTILE_POOL_TAG = "Projectile";
+        #endregion
+
         #region 스킬 확률 관련
         // 등급별 획득 확률 (백분율)
         public const float GRADE1_SKILL_PROBABILITY = 70f;

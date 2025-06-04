@@ -19,7 +19,7 @@ namespace MagicBattle.Player
         [SerializeField] private Animator animator; // 추후 애니메이션 추가 시 사용
 
         [Header("위치 설정")]
-        [SerializeField] private Vector3 fixedPosition = new Vector3(0f, 4f, 0f);
+        [SerializeField] private Vector3 fixedPosition = new Vector3(0f, 3f, 0f);
         [SerializeField] private bool useFixedPosition = true;
 
         // 프로퍼티
