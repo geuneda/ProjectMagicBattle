@@ -29,11 +29,16 @@ namespace MagicBattle.Monster
         private float lastAttackTime = 0f;
         private Transform playerTransform;
 
+        // 피격 관련 변수 (체력바 표시용)
+        private bool hasBeenHit = false;
+
         // 이벤트
         public UnityEvent<float, float> OnHealthChanged; // 현재체력, 최대체력
         public UnityEvent<MonsterStats> OnMonsterDeath; // 사망한 몬스터 정보
         public UnityEvent<float> OnDamageTaken; // 받은 데미지
+        public UnityEvent<float, SkillAttribute> OnDamageTakenWithAttribute; // 받은 데미지, 속성
         public UnityEvent<MonsterState> OnStateChanged; // 상태 변경
+        public UnityEvent OnFirstHit; // 첫 피격 시 (체력바 표시용)
 
         // 프로퍼티
         public float MaxHealth => maxHealth;
@@ -45,6 +50,7 @@ namespace MagicBattle.Monster
         public MonsterState CurrentState => currentState;
         public bool IsAlive => currentHealth > 0f;
         public bool CanAttack => Time.time >= lastAttackTime + attackCooldown && IsAlive;
+        public bool HasBeenHit => hasBeenHit;
 
         private void Awake()
         {
@@ -62,6 +68,7 @@ namespace MagicBattle.Monster
         private void InitializeStats()
         {
             currentHealth = maxHealth;
+            hasBeenHit = false;
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
         }
 
@@ -77,17 +84,36 @@ namespace MagicBattle.Monster
         }
 
         /// <summary>
-        /// 데미지를 받는 함수
+        /// 데미지를 받는 함수 (기본 공격용)
         /// </summary>
         /// <param name="damage">받을 데미지 양</param>
         public void TakeDamage(float damage)
+        {
+            TakeDamageWithAttribute(damage, SkillAttribute.Fire); // 기본 공격은 화염 속성으로 처리
+        }
+
+        /// <summary>
+        /// 속성이 있는 데미지를 받는 함수 (스킬 공격용)
+        /// </summary>
+        /// <param name="damage">받을 데미지 양</param>
+        /// <param name="attribute">공격 속성</param>
+        public void TakeDamageWithAttribute(float damage, SkillAttribute attribute)
         {
             if (!IsAlive) return;
 
             float actualDamage = Mathf.Max(0f, damage);
             currentHealth = Mathf.Max(0f, currentHealth - actualDamage);
 
+            // 첫 피격 체크
+            if (!hasBeenHit)
+            {
+                hasBeenHit = true;
+                OnFirstHit?.Invoke(); // 체력바 표시 트리거
+            }
+
+            // 이벤트 호출
             OnDamageTaken?.Invoke(actualDamage);
+            OnDamageTakenWithAttribute?.Invoke(actualDamage, attribute);
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
 
             // 체력이 0이 되면 사망 처리
@@ -180,6 +206,7 @@ namespace MagicBattle.Monster
         public void ResetMonster()
         {
             currentHealth = maxHealth;
+            hasBeenHit = false;
             ChangeState(MonsterState.Moving);
             lastAttackTime = 0f;
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
@@ -230,6 +257,24 @@ namespace MagicBattle.Monster
         private void TestTakeDamage()
         {
             TakeDamage(10f);
+        }
+
+        [ContextMenu("테스트: 화염 데미지 받기")]
+        private void TestTakeFireDamage()
+        {
+            TakeDamageWithAttribute(15f, SkillAttribute.Fire);
+        }
+
+        [ContextMenu("테스트: 얼음 데미지 받기")]
+        private void TestTakeIceDamage()
+        {
+            TakeDamageWithAttribute(12f, SkillAttribute.Ice);
+        }
+
+        [ContextMenu("테스트: 번개 데미지 받기")]
+        private void TestTakeThunderDamage()
+        {
+            TakeDamageWithAttribute(20f, SkillAttribute.Thunder);
         }
 
         [ContextMenu("테스트: 플레이어 공격")]

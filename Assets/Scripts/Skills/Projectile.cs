@@ -312,7 +312,8 @@ namespace MagicBattle.Skills
             MonsterStats monsterStats = target.GetComponent<MonsterStats>();
             if (monsterStats != null)
             {
-                monsterStats.TakeDamage(damage);
+                // 속성별 데미지 적용
+                monsterStats.TakeDamageWithAttribute(damage, skillAttribute);
                 hitTargets.Add(target);
                 hitCount++;
 

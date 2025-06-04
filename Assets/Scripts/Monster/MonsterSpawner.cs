@@ -13,7 +13,7 @@ namespace MagicBattle.Monster
     {
         [Header("스폰 설정")]
         [SerializeField] private GameObject monsterPrefab;
-        [SerializeField] private Vector3 spawnAreaCenter = new Vector3(0f, -4f, 0f);
+        [SerializeField] private Vector3 spawnAreaCenter = new Vector3(0f, -3f, 0f);
         [SerializeField] private Vector2 spawnAreaSize = new Vector2(8f, 1f);
 
         [Header("몬스터 풀링")]

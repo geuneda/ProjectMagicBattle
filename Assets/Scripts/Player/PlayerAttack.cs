@@ -166,8 +166,9 @@ namespace MagicBattle.Player
             var monsterStats = target.GetComponent<MagicBattle.Monster.MonsterStats>();
             if (monsterStats != null)
             {
-                monsterStats.TakeDamage(playerStats.BasicAttackDamage);
-                Debug.Log($"몬스터에게 {playerStats.BasicAttackDamage} 데미지를 입혔습니다!");
+                // 기본 공격은 화염 속성으로 처리하여 속성별 데미지 텍스트와 체력바가 표시되도록 함
+                monsterStats.TakeDamageWithAttribute(playerStats.BasicAttackDamage, MagicBattle.Common.SkillAttribute.Fire);
+                Debug.Log($"몬스터에게 {playerStats.BasicAttackDamage} 화염 데미지를 입혔습니다!");
             }
         }
 

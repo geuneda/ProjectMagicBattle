@@ -1,6 +1,7 @@
 using UnityEngine;
 using MagicBattle.Common;
 using MagicBattle.Managers;
+using MagicBattle.UI;
 
 namespace MagicBattle.Monster
 {
@@ -101,7 +102,9 @@ namespace MagicBattle.Monster
                 monsterStats.OnMonsterDeath.AddListener(OnMonsterDeath);
                 monsterStats.OnHealthChanged.AddListener(OnHealthChanged);
                 monsterStats.OnDamageTaken.AddListener(OnDamageTaken);
+                monsterStats.OnDamageTakenWithAttribute.AddListener(OnDamageTakenWithAttribute);
                 monsterStats.OnStateChanged.AddListener(OnStateChanged);
+                monsterStats.OnFirstHit.AddListener(OnFirstHit);
             }
         }
 
@@ -115,7 +118,9 @@ namespace MagicBattle.Monster
                 monsterStats.OnMonsterDeath.RemoveListener(OnMonsterDeath);
                 monsterStats.OnHealthChanged.RemoveListener(OnHealthChanged);
                 monsterStats.OnDamageTaken.RemoveListener(OnDamageTaken);
+                monsterStats.OnDamageTakenWithAttribute.RemoveListener(OnDamageTakenWithAttribute);
                 monsterStats.OnStateChanged.RemoveListener(OnStateChanged);
+                monsterStats.OnFirstHit.RemoveListener(OnFirstHit);
             }
         }
 
@@ -172,6 +177,36 @@ namespace MagicBattle.Monster
             {
                 // 잠깐 흰색으로 플래시
                 StartCoroutine(FlashWhite());
+            }
+        }
+
+        /// <summary>
+        /// 속성별 데미지를 받았을 때 호출되는 함수
+        /// </summary>
+        /// <param name="damage">받은 데미지</param>
+        /// <param name="attribute">공격 속성</param>
+        private void OnDamageTakenWithAttribute(float damage, SkillAttribute attribute)
+        {
+            // 일반 데미지 이벤트도 호출
+            OnDamageTaken(damage);
+
+            // 데미지 텍스트 표시
+            if (MonsterUIManager.Instance != null)
+            {
+                Vector3 damagePosition = transform.position + Vector3.up * 0.5f; // 몬스터 위쪽에 표시
+                MonsterUIManager.Instance.ShowDamageText(damage, attribute, damagePosition);
+            }
+        }
+
+        /// <summary>
+        /// 첫 피격 시 호출되는 함수 (체력바 표시)
+        /// </summary>
+        private void OnFirstHit()
+        {
+            // 체력바 할당 및 표시
+            if (MonsterUIManager.Instance != null)
+            {
+                MonsterUIManager.Instance.AssignHealthBar(monsterStats);
             }
         }
 
@@ -239,7 +274,7 @@ namespace MagicBattle.Monster
             // 시각적 요소 리셋
             if (spriteRenderer != null)
             {
-                spriteRenderer.color = Color.red;
+                spriteRenderer.color = Color.white;
             }
         }
 

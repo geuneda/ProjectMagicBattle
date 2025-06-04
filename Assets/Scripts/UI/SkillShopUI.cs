@@ -46,10 +46,6 @@ namespace MagicBattle.UI
         // 구매 횟수 (비용 증가용)
         private int purchaseCount = 0;
 
-        private void Awake()
-        {
-        }
-
         private void Start()
         {
             InitializeComponents();
