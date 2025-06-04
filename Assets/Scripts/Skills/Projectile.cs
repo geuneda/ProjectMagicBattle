@@ -123,18 +123,16 @@ namespace MagicBattle.Skills
                 maxTargets = skillData.MaxTargets;
                 skillAttribute = skillData.Attribute;
 
-                // 스프라이트 설정
-                if (skillData.ProjectilePrefab != null && skillData.ProjectilePrefab.GetComponent<SpriteRenderer>() != null)
+                // 스킬의 투사체 프리팹이 있다면 해당 프리팹의 설정 적용
+                if (skillData.ProjectilePrefab != null)
                 {
-                    var prefabSprite = skillData.ProjectilePrefab.GetComponent<SpriteRenderer>().sprite;
-                    if (prefabSprite != null)
-                    {
-                        spriteRenderer.sprite = prefabSprite;
-                    }
+                    ApplyProjectilePrefabSettings(skillData.ProjectilePrefab);
                 }
-
-                // 속성별 색상 설정
-                SetAttributeColor(skillAttribute);
+                else
+                {
+                    // 프리팹이 없다면 속성별 기본 색상만 적용
+                    SetAttributeColor(skillAttribute);
+                }
 
                 // 이펙트 설정
                 hitEffect = skillData.HitEffect;
@@ -164,20 +162,119 @@ namespace MagicBattle.Skills
         }
 
         /// <summary>
+        /// 스킬 프리팹의 설정을 현재 투사체에 적용
+        /// </summary>
+        /// <param name="projectilePrefab">적용할 프리팹</param>
+        private void ApplyProjectilePrefabSettings(GameObject projectilePrefab)
+        {
+            // 프리팹의 SpriteRenderer 설정 적용
+            SpriteRenderer prefabSpriteRenderer = projectilePrefab.GetComponent<SpriteRenderer>();
+            if (prefabSpriteRenderer != null)
+            {
+                // 스프라이트 적용
+                if (prefabSpriteRenderer.sprite != null)
+                {
+                    spriteRenderer.sprite = prefabSpriteRenderer.sprite;
+                }
+
+                // 색상 적용 (속성 색상과 프리팹 색상을 결합)
+                Color prefabColor = prefabSpriteRenderer.color;
+                Color attributeColor = GetAttributeColor(skillAttribute);
+                
+                // 프리팹 색상이 기본 흰색이 아니라면 프리팹 색상 사용, 아니면 속성 색상 사용
+                if (prefabColor != Color.white)
+                {
+                    spriteRenderer.color = prefabColor;
+                }
+                else
+                {
+                    spriteRenderer.color = attributeColor;
+                }
+
+                // 기타 SpriteRenderer 설정 적용
+                spriteRenderer.sortingLayerName = prefabSpriteRenderer.sortingLayerName;
+                spriteRenderer.sortingOrder = prefabSpriteRenderer.sortingOrder;
+            }
+
+            // 프리팹의 Collider 설정 적용
+            CircleCollider2D prefabCollider = projectilePrefab.GetComponent<CircleCollider2D>();
+            if (prefabCollider != null && projectileCollider != null)
+            {
+                projectileCollider.radius = prefabCollider.radius;
+                projectileCollider.offset = prefabCollider.offset;
+            }
+
+            // 프리팹의 추가 컴포넌트들 복사 (ParticleSystem, AudioSource 등)
+            CopyAdditionalComponents(projectilePrefab);
+        }
+
+        /// <summary>
+        /// 프리팹의 추가 컴포넌트들을 현재 투사체에 복사
+        /// </summary>
+        /// <param name="projectilePrefab">복사할 프리팹</param>
+        private void CopyAdditionalComponents(GameObject projectilePrefab)
+        {
+            // ParticleSystem 복사
+            ParticleSystem prefabParticleSystem = projectilePrefab.GetComponent<ParticleSystem>();
+            if (prefabParticleSystem != null)
+            {
+                ParticleSystem currentParticleSystem = GetComponent<ParticleSystem>();
+                if (currentParticleSystem == null)
+                {
+                    // 새로 추가하고 설정 복사
+                    currentParticleSystem = gameObject.AddComponent<ParticleSystem>();
+                }
+                
+                // ParticleSystem 설정을 완전히 복사하는 것은 복잡하므로 기본적인 설정만 적용
+                var main = currentParticleSystem.main;
+                var prefabMain = prefabParticleSystem.main;
+                main.startColor = prefabMain.startColor;
+                main.startSpeed = prefabMain.startSpeed;
+                main.startSize = prefabMain.startSize;
+            }
+
+            // TrailRenderer 복사
+            TrailRenderer prefabTrail = projectilePrefab.GetComponent<TrailRenderer>();
+            if (prefabTrail != null)
+            {
+                TrailRenderer currentTrail = GetComponent<TrailRenderer>();
+                if (currentTrail == null)
+                {
+                    currentTrail = gameObject.AddComponent<TrailRenderer>();
+                }
+                
+                currentTrail.material = prefabTrail.material;
+                currentTrail.startColor = prefabTrail.startColor;
+                currentTrail.endColor = prefabTrail.endColor;
+                currentTrail.startWidth = prefabTrail.startWidth;
+                currentTrail.endWidth = prefabTrail.endWidth;
+                currentTrail.time = prefabTrail.time;
+            }
+        }
+
+        /// <summary>
         /// 속성별 투사체 색상 설정
         /// </summary>
         /// <param name="attribute">스킬 속성</param>
         private void SetAttributeColor(SkillAttribute attribute)
         {
-            Color attributeColor = attribute switch
+            spriteRenderer.color = GetAttributeColor(attribute);
+        }
+
+        /// <summary>
+        /// 속성별 색상 반환
+        /// </summary>
+        /// <param name="attribute">스킬 속성</param>
+        /// <returns>속성 색상</returns>
+        private Color GetAttributeColor(SkillAttribute attribute)
+        {
+            return attribute switch
             {
                 SkillAttribute.Fire => Color.red,
                 SkillAttribute.Ice => Color.cyan,
                 SkillAttribute.Thunder => Color.yellow,
                 _ => Color.white
             };
-
-            spriteRenderer.color = attributeColor;
         }
 
         /// <summary>

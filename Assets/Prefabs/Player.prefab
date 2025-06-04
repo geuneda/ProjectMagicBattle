@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 4646383674707577365}
   - component: {fileID: 6898652356941965042}
   - component: {fileID: 5350838830869732022}
+  - component: {fileID: 7959286620359362484}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -124,7 +125,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c1c00ba3bfa3c4aaa849240f7ae2c06d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 100
+  maxHealth: 1000
   currentHealth: 0
   basicAttackDamage: 10
   basicAttackRange: 2
@@ -187,7 +188,7 @@ CircleCollider2D:
   m_CallbackLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_UsedByEffector: 0
   m_CompositeOperation: 0
   m_CompositeOrder: 0
@@ -233,3 +234,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   availableSkills: []
+--- !u!114 &7959286620359362484
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3402347549121396353}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c8b1bfa4733d48aab9746cb05b2b980, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  firePoint: {fileID: 3405363634932443451}
+  targetSearchRange: 10
+  defaultProjectilePrefab: {fileID: 5953545495418054763, guid: 5ccd9360880b44a4389b0b33d69aa045, type: 3}
+  initialPoolSize: 20

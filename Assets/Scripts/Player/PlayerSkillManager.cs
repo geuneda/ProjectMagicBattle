@@ -15,6 +15,11 @@ namespace MagicBattle.Player
         [Header("스킬 관리")]
         [SerializeField] private List<SkillData> availableSkills = new List<SkillData>(); // 사용 가능한 스킬 리스트
 
+        [Header("디버그 및 테스트")]
+        [SerializeField] private bool enableDebugLogs = true; // 디버그 로그 활성화
+        [SerializeField] private bool addTestSkillOnStart = true; // 시작 시 테스트 스킬 추가
+        [SerializeField] private int testSkillsCount = 1; // 추가할 테스트 스킬 개수
+
         // 보유 스킬 정보 (스킬ID -> 스택 수)
         private Dictionary<string, int> ownedSkills = new Dictionary<string, int>();
         
@@ -26,6 +31,10 @@ namespace MagicBattle.Player
 
         // 자동 스킬 사용 코루틴
         private Coroutine autoSkillCoroutine;
+
+        // 자동 스킬 사용 통계 (디버그용)
+        private Dictionary<string, int> skillUsageCount = new Dictionary<string, int>();
+        private float lastSkillUsageTime = 0f;
 
         // 이벤트
         public System.Action<SkillData, int> OnSkillAcquired; // 스킬 획득 (스킬, 스택)
@@ -40,7 +49,19 @@ namespace MagicBattle.Player
         private void Start()
         {
             InitializeSkillData();
+            
+            // 테스트용 스킬 추가
+            if (addTestSkillOnStart)
+            {
+                AddTestSkills();
+            }
+            
             StartAutoSkillUsage();
+            
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PlayerSkillManager] 초기화 완료. 사용 가능한 스킬: {availableSkills.Count}개");
+            }
         }
 
         /// <summary>
@@ -53,6 +74,10 @@ namespace MagicBattle.Player
             if (skillSystem == null)
             {
                 skillSystem = gameObject.AddComponent<SkillSystem>();
+                if (enableDebugLogs)
+                {
+                    Debug.Log("[PlayerSkillManager] SkillSystem 컴포넌트를 자동으로 추가했습니다.");
+                }
             }
 
             // 스킬 시스템 이벤트 구독
@@ -71,15 +96,58 @@ namespace MagicBattle.Player
             {
                 if (skill != null)
                 {
-                    string skillID = skill.GetSkillID();
-                    if (!skillDataMap.ContainsKey(skillID))
-                    {
-                        skillDataMap.Add(skillID, skill);
-                    }
+                    RegisterSkillData(skill);
                 }
             }
 
-            Debug.Log($"스킬 데이터 초기화 완료. {skillDataMap.Count}개의 스킬 등록됨.");
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PlayerSkillManager] 스킬 데이터 초기화 완료. {skillDataMap.Count}개의 스킬 등록됨.");
+            }
+        }
+
+        /// <summary>
+        /// 스킬 데이터를 맵에 등록
+        /// </summary>
+        /// <param name="skillData">등록할 스킬 데이터</param>
+        private void RegisterSkillData(SkillData skillData)
+        {
+            if (skillData == null) return;
+
+            string skillID = skillData.GetSkillID();
+            if (!skillDataMap.ContainsKey(skillID))
+            {
+                skillDataMap.Add(skillID, skillData);
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"[PlayerSkillManager] 스킬 데이터 등록: {skillData.SkillName} ({skillID})");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 테스트용 스킬 추가
+        /// </summary>
+        private void AddTestSkills()
+        {
+            if (availableSkills.Count == 0)
+            {
+                Debug.LogWarning("[PlayerSkillManager] availableSkills가 비어있어 테스트 스킬을 추가할 수 없습니다. Inspector에서 스킬을 할당해주세요.");
+                return;
+            }
+
+            for (int i = 0; i < testSkillsCount && i < availableSkills.Count; i++)
+            {
+                SkillData testSkill = availableSkills[i];
+                if (testSkill != null)
+                {
+                    AcquireSkill(testSkill);
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log($"[PlayerSkillManager] 테스트 스킬 추가됨: {testSkill.SkillName}");
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -92,6 +160,11 @@ namespace MagicBattle.Player
                 StopCoroutine(autoSkillCoroutine);
             }
             autoSkillCoroutine = StartCoroutine(AutoSkillUsageCoroutine());
+            
+            if (enableDebugLogs)
+            {
+                Debug.Log("[PlayerSkillManager] 자동 스킬 사용 시작됨.");
+            }
         }
 
         /// <summary>
@@ -102,6 +175,8 @@ namespace MagicBattle.Player
         {
             while (true)
             {
+                bool anySkillUsed = false;
+                
                 // 보유한 모든 스킬에 대해 사용 시도
                 foreach (var ownedSkill in ownedSkills)
                 {
@@ -115,9 +190,30 @@ namespace MagicBattle.Player
                         // 스킬 사용 시도
                         if (skillSystem.TryUseSkill(skillData))
                         {
+                            anySkillUsed = true;
+                            lastSkillUsageTime = Time.time;
+                            
+                            // 사용 횟수 기록
+                            if (!skillUsageCount.ContainsKey(skillID))
+                            {
+                                skillUsageCount[skillID] = 0;
+                            }
+                            skillUsageCount[skillID]++;
+                            
+                            if (enableDebugLogs)
+                            {
+                                Debug.Log($"[PlayerSkillManager] 스킬 자동 사용: {skillData.SkillName} (사용 횟수: {skillUsageCount[skillID]})");
+                            }
+                            
                             OnSkillUsed?.Invoke(skillData);
                         }
                     }
+                }
+
+                // 스킬이 없거나 사용할 수 없는 경우 경고 (처음 5초 동안만)
+                if (!anySkillUsed && Time.time < 5f && ownedSkills.Count == 0 && enableDebugLogs)
+                {
+                    Debug.LogWarning("[PlayerSkillManager] 보유한 스킬이 없어 자동 스킬 사용을 할 수 없습니다.");
                 }
 
                 // 0.1초마다 체크
@@ -133,7 +229,16 @@ namespace MagicBattle.Player
         public bool AcquireSkill(SkillData skillData)
         {
             if (skillData == null)
+            {
+                if (enableDebugLogs)
+                {
+                    Debug.LogError("[PlayerSkillManager] 획득하려는 스킬이 null입니다.");
+                }
                 return false;
+            }
+
+            // 스킬 데이터를 맵에 등록 (동적 등록)
+            RegisterSkillData(skillData);
 
             string skillID = skillData.GetSkillID();
 
@@ -145,13 +250,19 @@ namespace MagicBattle.Player
                 // 최대 스택 확인
                 if (currentStack >= Constants.MAX_SKILL_STACK)
                 {
-                    Debug.Log($"스킬 {skillData.SkillName}이 최대 스택에 도달했습니다.");
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log($"[PlayerSkillManager] 스킬 {skillData.SkillName}이 최대 스택에 도달했습니다.");
+                    }
                     return false;
                 }
 
                 // 스택 증가
                 ownedSkills[skillID]++;
-                Debug.Log($"스킬 {skillData.SkillName} 스택 증가: {ownedSkills[skillID]}");
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"[PlayerSkillManager] 스킬 {skillData.SkillName} 스택 증가: {ownedSkills[skillID]}");
+                }
 
                 // 승급 조건 체크
                 CheckForSkillUpgrade(skillData);
@@ -160,7 +271,10 @@ namespace MagicBattle.Player
             {
                 // 새로운 스킬 획득
                 ownedSkills.Add(skillID, 1);
-                Debug.Log($"새로운 스킬 획득: {skillData.SkillName}");
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"[PlayerSkillManager] 새로운 스킬 획득: {skillData.SkillName}");
+                }
             }
 
             // 이벤트 발생
@@ -198,8 +312,15 @@ namespace MagicBattle.Player
                     SkillData upgradedSkill = skillDataMap[nextGradeSkillID];
                     AcquireSkill(upgradedSkill);
 
-                    Debug.Log($"스킬 승급: {skillData.SkillName} -> {upgradedSkill.SkillName}");
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log($"[PlayerSkillManager] 스킬 승급: {skillData.SkillName} -> {upgradedSkill.SkillName}");
+                    }
                     OnSkillUpgraded?.Invoke(upgradedSkill);
+                }
+                else if (enableDebugLogs)
+                {
+                    Debug.LogWarning($"[PlayerSkillManager] 상위 등급 스킬을 찾을 수 없습니다: {nextGradeSkillID}");
                 }
             }
         }
@@ -242,7 +363,10 @@ namespace MagicBattle.Player
             // 합성 조건 확인
             if (currentStack < Constants.SKILL_UPGRADE_REQUIRED_COUNT || skillData.Grade >= SkillGrade.Grade3)
             {
-                Debug.Log($"스킬 {skillData.SkillName} 합성 조건이 충족되지 않았습니다.");
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"[PlayerSkillManager] 스킬 {skillData.SkillName} 합성 조건이 충족되지 않았습니다.");
+                }
                 return false;
             }
 
@@ -253,7 +377,10 @@ namespace MagicBattle.Player
             // 상위 등급 스킬이 존재하는지 확인
             if (!skillDataMap.ContainsKey(nextGradeSkillID))
             {
-                Debug.LogError($"상위 등급 스킬을 찾을 수 없습니다: {nextGradeSkillID}");
+                if (enableDebugLogs)
+                {
+                    Debug.LogError($"[PlayerSkillManager] 상위 등급 스킬을 찾을 수 없습니다: {nextGradeSkillID}");
+                }
                 return false;
             }
 
@@ -275,7 +402,10 @@ namespace MagicBattle.Player
                 ownedSkills.Add(nextGradeSkillID, 1);
             }
 
-            Debug.Log($"수동 스킬 합성 완료: {skillData.SkillName} -> {upgradedSkill.SkillName}");
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PlayerSkillManager] 수동 스킬 합성 완료: {skillData.SkillName} -> {upgradedSkill.SkillName}");
+            }
             
             // 이벤트 발생
             OnSkillUpgraded?.Invoke(upgradedSkill);
@@ -328,7 +458,68 @@ namespace MagicBattle.Player
         /// <param name="skillData">시전된 스킬</param>
         private void OnSkillCastHandler(SkillData skillData)
         {
-            Debug.Log($"스킬 시전됨: {skillData.SkillName}");
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[PlayerSkillManager] 스킬 시전됨: {skillData.SkillName}");
+            }
+        }
+
+        /// <summary>
+        /// 자동 스킬 사용 통계 반환
+        /// </summary>
+        /// <returns>스킬별 사용 횟수</returns>
+        public Dictionary<string, int> GetSkillUsageStats()
+        {
+            return new Dictionary<string, int>(skillUsageCount);
+        }
+
+        /// <summary>
+        /// 마지막 스킬 사용 시간 반환
+        /// </summary>
+        /// <returns>마지막 스킬 사용 시간</returns>
+        public float GetLastSkillUsageTime()
+        {
+            return lastSkillUsageTime;
+        }
+
+        /// <summary>
+        /// 스킬 자동 사용이 활성화되어 있는지 확인
+        /// </summary>
+        /// <returns>자동 스킬 사용 활성화 상태</returns>
+        public bool IsAutoSkillActive()
+        {
+            return autoSkillCoroutine != null;
+        }
+
+        /// <summary>
+        /// 자동 스킬 사용 일시정지/재개
+        /// </summary>
+        /// <param name="pause">일시정지 여부</param>
+        public void SetAutoSkillPause(bool pause)
+        {
+            if (pause)
+            {
+                if (autoSkillCoroutine != null)
+                {
+                    StopCoroutine(autoSkillCoroutine);
+                    autoSkillCoroutine = null;
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log("[PlayerSkillManager] 자동 스킬 사용이 일시정지되었습니다.");
+                    }
+                }
+            }
+            else
+            {
+                if (autoSkillCoroutine == null)
+                {
+                    StartAutoSkillUsage();
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log("[PlayerSkillManager] 자동 스킬 사용이 재개되었습니다.");
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -340,6 +531,10 @@ namespace MagicBattle.Player
             if (skillSystem != null)
             {
                 skillSystem.ResetAllCooldowns();
+                if (enableDebugLogs)
+                {
+                    Debug.Log("[PlayerSkillManager] 모든 스킬 쿨타임이 리셋되었습니다.");
+                }
             }
         }
 
@@ -349,14 +544,43 @@ namespace MagicBattle.Player
         [ContextMenu("보유 스킬 정보 출력")]
         public void PrintOwnedSkills()
         {
-            Debug.Log("=== 보유 스킬 정보 ===");
+            Debug.Log("=== [PlayerSkillManager] 보유 스킬 정보 ===");
+            if (ownedSkills.Count == 0)
+            {
+                Debug.Log("보유한 스킬이 없습니다.");
+                return;
+            }
+
             foreach (var skill in ownedSkills)
             {
                 if (skillDataMap.ContainsKey(skill.Key))
                 {
                     SkillData skillData = skillDataMap[skill.Key];
-                    Debug.Log($"{skillData.SkillName} ({skill.Key}): {skill.Value}스택");
+                    int usageCount = skillUsageCount.ContainsKey(skill.Key) ? skillUsageCount[skill.Key] : 0;
+                    Debug.Log($"{skillData.SkillName} ({skill.Key}): {skill.Value}스택, 사용횟수: {usageCount}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// 디버그용 자동 스킬 사용 상태 출력
+        /// </summary>
+        [ContextMenu("자동 스킬 사용 상태 출력")]
+        public void PrintAutoSkillStatus()
+        {
+            Debug.Log("=== [PlayerSkillManager] 자동 스킬 사용 상태 ===");
+            Debug.Log($"자동 스킬 활성화: {IsAutoSkillActive()}");
+            Debug.Log($"보유 스킬 수: {ownedSkills.Count}");
+            Debug.Log($"등록된 스킬 데이터 수: {skillDataMap.Count}");
+            Debug.Log($"마지막 스킬 사용 시간: {(lastSkillUsageTime > 0 ? (Time.time - lastSkillUsageTime).ToString("F1") + "초 전" : "사용한 적 없음")}");
+            
+            if (skillSystem != null)
+            {
+                Debug.Log("SkillSystem 연결됨");
+            }
+            else
+            {
+                Debug.LogError("SkillSystem이 연결되지 않음!");
             }
         }
 
@@ -370,6 +594,28 @@ namespace MagicBattle.Player
             {
                 SkillData randomSkill = availableSkills[Random.Range(0, availableSkills.Count)];
                 AcquireSkill(randomSkill);
+            }
+            else
+            {
+                Debug.LogWarning("[PlayerSkillManager] 사용 가능한 스킬이 없어 랜덤 스킬을 획득할 수 없습니다.");
+            }
+        }
+
+        /// <summary>
+        /// Inspector에서 사용 가능한 스킬 목록에 스킬 추가
+        /// </summary>
+        /// <param name="skillData">추가할 스킬</param>
+        public void AddAvailableSkill(SkillData skillData)
+        {
+            if (skillData != null && !availableSkills.Contains(skillData))
+            {
+                availableSkills.Add(skillData);
+                RegisterSkillData(skillData);
+                
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"[PlayerSkillManager] 사용 가능한 스킬에 추가됨: {skillData.SkillName}");
+                }
             }
         }
 
@@ -385,6 +631,11 @@ namespace MagicBattle.Player
             if (autoSkillCoroutine != null)
             {
                 StopCoroutine(autoSkillCoroutine);
+            }
+
+            if (enableDebugLogs)
+            {
+                Debug.Log("[PlayerSkillManager] 컴포넌트가 정리되었습니다.");
             }
         }
     }

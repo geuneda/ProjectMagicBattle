@@ -17,13 +17,16 @@ namespace MagicBattle.Skills
         [SerializeField] private Transform firePoint; // 투사체 발사 지점
         [SerializeField] private float targetSearchRange = 10f; // 타겟 탐지 범위
 
-        [Header("투사체 풀링")]
-        [SerializeField] private GameObject projectilePrefab; // 기본 투사체 프리팹
+        [Header("기본 투사체 풀링")]
+        [SerializeField] private GameObject defaultProjectilePrefab; // 기본 투사체 프리팹 (백업용)
         [SerializeField] private int initialPoolSize = 20; // 초기 풀 크기
 
         // 스킬 쿨타임 관리
         private Dictionary<string, float> skillCooldowns = new Dictionary<string, float>();
         private Dictionary<string, float> lastSkillUseTimes = new Dictionary<string, float>();
+
+        // 스킬별 투사체 풀 관리
+        private HashSet<string> initializedPools = new HashSet<string>();
 
         // 컴포넌트 참조
         private Transform playerTransform;
@@ -39,7 +42,7 @@ namespace MagicBattle.Skills
 
         private void Start()
         {
-            InitializeProjectilePool();
+            InitializeDefaultProjectilePool();
         }
 
         /// <summary>
@@ -57,19 +60,61 @@ namespace MagicBattle.Skills
         }
 
         /// <summary>
-        /// 투사체 오브젝트 풀 초기화
+        /// 기본 투사체 오브젝트 풀 초기화 (백업용)
         /// </summary>
-        private void InitializeProjectilePool()
+        private void InitializeDefaultProjectilePool()
         {
-            if (PoolManager.Instance != null && projectilePrefab != null)
+            // DefaultProjectilePrefab이 설정되지 않았다면 Resources에서 로드 시도
+            if (defaultProjectilePrefab == null)
             {
-                PoolManager.Instance.AddPool(Constants.PROJECTILE_POOL_TAG, projectilePrefab, initialPoolSize);
-                Debug.Log($"투사체 풀이 생성되었습니다. (크기: {initialPoolSize})");
+                defaultProjectilePrefab = Resources.Load<GameObject>("Projectile_Base");
+                if (defaultProjectilePrefab == null)
+                {
+                    Debug.LogWarning("DefaultProjectilePrefab이 설정되지 않았고, Resources/Projectile_Base도 찾을 수 없습니다.");
+                    return;
+                }
             }
-            else
+
+            // PoolManager가 있는 경우에만 기본 풀 생성
+            if (PoolManager.Instance != null)
             {
-                Debug.LogWarning("PoolManager 또는 ProjectilePrefab이 없어서 투사체 풀을 생성할 수 없습니다.");
+                string defaultPoolTag = Constants.PROJECTILE_POOL_TAG;
+                PoolManager.Instance.AddPool(defaultPoolTag, defaultProjectilePrefab, initialPoolSize);
+                initializedPools.Add(defaultPoolTag);
+                Debug.Log($"기본 투사체 풀이 생성되었습니다. (크기: {initialPoolSize})");
             }
+        }
+
+        /// <summary>
+        /// 특정 스킬의 투사체 풀 초기화
+        /// </summary>
+        /// <param name="skillData">스킬 데이터</param>
+        private void InitializeSkillProjectilePool(SkillData skillData)
+        {
+            if (skillData?.ProjectilePrefab == null || PoolManager.Instance == null)
+                return;
+
+            string poolTag = GetSkillProjectilePoolTag(skillData);
+            
+            // 이미 초기화된 풀이면 패스
+            if (initializedPools.Contains(poolTag))
+                return;
+
+            // 새 풀 생성
+            PoolManager.Instance.AddPool(poolTag, skillData.ProjectilePrefab, initialPoolSize);
+            initializedPools.Add(poolTag);
+            
+            Debug.Log($"스킬 '{skillData.SkillName}'의 투사체 풀이 생성되었습니다. (태그: {poolTag})");
+        }
+
+        /// <summary>
+        /// 스킬별 투사체 풀 태그 생성
+        /// </summary>
+        /// <param name="skillData">스킬 데이터</param>
+        /// <returns>풀 태그</returns>
+        private string GetSkillProjectilePoolTag(SkillData skillData)
+        {
+            return $"Projectile_{skillData.GetSkillID()}";
         }
 
         /// <summary>
@@ -87,6 +132,9 @@ namespace MagicBattle.Skills
             // 쿨타임 확인
             if (!IsSkillReady(skillID, skillData.GetScaledCooldown()))
                 return false;
+
+            // 스킬별 투사체 풀 초기화 (필요한 경우)
+            InitializeSkillProjectilePool(skillData);
 
             // 스킬 실행
             ExecuteSkill(skillData);
@@ -181,23 +229,40 @@ namespace MagicBattle.Skills
         }
 
         /// <summary>
-        /// 단일 투사체 발사
+        /// 단일 투사체 발사 (스킬별 프리팹 사용)
         /// </summary>
         /// <param name="skillData">스킬 데이터</param>
         /// <param name="direction">발사 방향</param>
         private void LaunchSingleProjectile(SkillData skillData, Vector2 direction)
         {
             GameObject projectileObj = null;
+            GameObject targetPrefab = skillData.ProjectilePrefab ?? defaultProjectilePrefab;
 
-            // 풀에서 투사체 가져오기
+            if (targetPrefab == null)
+            {
+                Debug.LogError($"스킬 '{skillData.SkillName}'의 투사체 프리팹이 없고 기본 프리팹도 없습니다!");
+                return;
+            }
+
+            // 스킬별 풀에서 투사체 가져오기
             if (PoolManager.Instance != null)
             {
-                projectileObj = PoolManager.Instance.SpawnFromPool(Constants.PROJECTILE_POOL_TAG, firePoint.position);
+                string poolTag = skillData.ProjectilePrefab != null ? 
+                    GetSkillProjectilePoolTag(skillData) : Constants.PROJECTILE_POOL_TAG;
+                
+                projectileObj = PoolManager.Instance.SpawnFromPool(poolTag, firePoint.position);
+                
+                // 풀에서 가져오지 못했다면 직접 생성
+                if (projectileObj == null)
+                {
+                    Debug.LogWarning($"풀 '{poolTag}'에서 투사체를 가져올 수 없어 직접 생성합니다.");
+                    projectileObj = Instantiate(targetPrefab, firePoint.position, Quaternion.identity);
+                }
             }
             else
             {
                 // 풀이 없다면 직접 생성
-                projectileObj = Instantiate(projectilePrefab, firePoint.position, Quaternion.identity);
+                projectileObj = Instantiate(targetPrefab, firePoint.position, Quaternion.identity);
             }
 
             if (projectileObj != null)
@@ -345,6 +410,18 @@ namespace MagicBattle.Skills
             skillCooldowns.Clear();
             lastSkillUseTimes.Clear();
             Debug.Log("모든 스킬 쿨타임이 초기화되었습니다.");
+        }
+
+        /// <summary>
+        /// 초기화된 풀 정보 출력 (디버그용)
+        /// </summary>
+        public void PrintPoolInfo()
+        {
+            Debug.Log($"초기화된 투사체 풀 개수: {initializedPools.Count}");
+            foreach (string poolTag in initializedPools)
+            {
+                Debug.Log($"- {poolTag}");
+            }
         }
 
         /// <summary>

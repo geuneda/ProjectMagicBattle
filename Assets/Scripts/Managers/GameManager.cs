@@ -20,7 +20,7 @@ namespace MagicBattle.Managers
         [Header("게임 통계")]
         [SerializeField] private float gameTime = 0f;
         [SerializeField] private int totalMonstersKilled = 0;
-        [SerializeField] private int currentGold = 0;
+        private int currentGold = 1000;
 
         // 싱글톤 패턴
         public static GameManager Instance { get; private set; }
@@ -93,7 +93,6 @@ namespace MagicBattle.Managers
             ChangeGameState(GameState.Playing);
             gameTime = 0f;
             totalMonstersKilled = 0;
-            currentGold = 0;
 
             // 플레이어 이벤트 구독
             if (playerController != null && playerController.Stats != null)

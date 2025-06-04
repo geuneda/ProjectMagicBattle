@@ -21,11 +21,19 @@ namespace MagicBattle.Skills
         private bool isInitialized = false;
 
         /// <summary>
-        /// 데이터베이스 초기화
+        /// 스킬 데이터베이스 초기화
         /// </summary>
         public void Initialize()
         {
             if (isInitialized) return;
+
+            Debug.Log("SkillDatabase 초기화 시작...");
+            
+            if (allSkills == null)
+            {
+                Debug.LogError("SkillDatabase: allSkills가 null입니다! ScriptableObject가 제대로 설정되지 않았습니다.");
+                allSkills = new List<SkillData>();
+            }
 
             BuildSkillMaps();
             isInitialized = true;
@@ -37,6 +45,8 @@ namespace MagicBattle.Skills
         /// </summary>
         private void BuildSkillMaps()
         {
+            Debug.Log("BuildSkillMaps 시작...");
+            
             skillByID = new Dictionary<string, SkillData>();
             skillsByAttribute = new Dictionary<SkillAttribute, List<SkillData>>();
             skillsByGrade = new Dictionary<SkillGrade, List<SkillData>>();
@@ -52,30 +62,41 @@ namespace MagicBattle.Skills
                 skillsByGrade[grade] = new List<SkillData>();
             }
 
+            Debug.Log($"딕셔너리 초기화 완료. allSkills 개수: {allSkills?.Count ?? 0}");
+
             // 스킬 데이터 매핑
-            foreach (SkillData skill in allSkills)
+            if (allSkills != null)
             {
-                if (skill != null)
+                foreach (SkillData skill in allSkills)
                 {
-                    string skillID = skill.GetSkillID();
-                    
-                    // ID별 매핑
-                    if (!skillByID.ContainsKey(skillID))
+                    if (skill != null)
                     {
-                        skillByID.Add(skillID, skill);
+                        string skillID = skill.GetSkillID();
+                        
+                        // ID별 매핑
+                        if (!skillByID.ContainsKey(skillID))
+                        {
+                            skillByID.Add(skillID, skill);
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"중복된 스킬 ID: {skillID}");
+                        }
+
+                        // 속성별 매핑
+                        skillsByAttribute[skill.Attribute].Add(skill);
+
+                        // 등급별 매핑
+                        skillsByGrade[skill.Grade].Add(skill);
                     }
                     else
                     {
-                        Debug.LogWarning($"중복된 스킬 ID: {skillID}");
+                        Debug.LogWarning("null인 스킬 데이터가 발견되었습니다.");
                     }
-
-                    // 속성별 매핑
-                    skillsByAttribute[skill.Attribute].Add(skill);
-
-                    // 등급별 매핑
-                    skillsByGrade[skill.Grade].Add(skill);
                 }
             }
+            
+            Debug.Log($"스킬 매핑 완료 - ID: {skillByID.Count}, 속성별: {skillsByAttribute.Count}, 등급별: {skillsByGrade.Count}");
         }
 
         /// <summary>
@@ -122,7 +143,23 @@ namespace MagicBattle.Skills
         /// <returns>해당 등급의 스킬 리스트</returns>
         public List<SkillData> GetSkillsByGrade(SkillGrade grade)
         {
-            if (!isInitialized) Initialize();
+            if (!isInitialized) 
+            {
+                Initialize();
+            }
+
+            // skillsByGrade가 null인 경우 방어적 처리
+            if (skillsByGrade == null)
+            {
+                Debug.LogError("SkillDatabase: skillsByGrade가 초기화되지 않았습니다. 재초기화를 시도합니다.");
+                BuildSkillMaps();
+                
+                if (skillsByGrade == null)
+                {
+                    Debug.LogError("SkillDatabase: 재초기화에도 실패했습니다. 빈 리스트를 반환합니다.");
+                    return new List<SkillData>();
+                }
+            }
 
             return skillsByGrade.ContainsKey(grade) ? 
                 new List<SkillData>(skillsByGrade[grade]) : new List<SkillData>();

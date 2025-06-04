@@ -26,6 +26,7 @@ namespace MagicBattle.Player
         // 프로퍼티
         public PlayerStats Stats => playerStats;
         public PlayerAttack Attack => playerAttack;
+        public PlayerSkillManager SkillManager => playerSkillManager;
         public bool IsAlive => playerStats != null && playerStats.IsAlive;
 
         private void Awake()
@@ -180,6 +181,58 @@ namespace MagicBattle.Player
         }
         #endregion
 
+        #region 스킬 관련 메서드
+        /// <summary>
+        /// 스킬 획득
+        /// </summary>
+        /// <param name="skillData">획득할 스킬</param>
+        /// <returns>성공 여부</returns>
+        public bool AcquireSkill(SkillData skillData)
+        {
+            if (playerSkillManager != null)
+            {
+                return playerSkillManager.AcquireSkill(skillData);
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 테스트용 랜덤 스킬 획득
+        /// </summary>
+        public void AcquireRandomSkill()
+        {
+            if (playerSkillManager != null)
+            {
+                playerSkillManager.AcquireRandomSkillForTest();
+            }
+        }
+
+        /// <summary>
+        /// 자동 스킬 사용 일시정지/재개
+        /// </summary>
+        /// <param name="pause">일시정지 여부</param>
+        public void SetAutoSkillPause(bool pause)
+        {
+            if (playerSkillManager != null)
+            {
+                playerSkillManager.SetAutoSkillPause(pause);
+            }
+        }
+
+        /// <summary>
+        /// 보유 스킬 개수 반환
+        /// </summary>
+        /// <returns>보유 스킬 개수</returns>
+        public int GetOwnedSkillCount()
+        {
+            if (playerSkillManager != null)
+            {
+                return playerSkillManager.GetAllOwnedSkills().Count;
+            }
+            return 0;
+        }
+        #endregion
+
         #region 공용 메서드
         /// <summary>
         /// 플레이어를 지정된 위치로 이동
@@ -254,6 +307,30 @@ namespace MagicBattle.Player
         private void TestResetPosition()
         {
             SetPosition(fixedPosition);
+        }
+
+        [ContextMenu("테스트: 랜덤 스킬 획득")]
+        private void TestAcquireRandomSkill()
+        {
+            AcquireRandomSkill();
+        }
+
+        [ContextMenu("테스트: 자동 스킬 상태 출력")]
+        private void TestPrintAutoSkillStatus()
+        {
+            if (playerSkillManager != null)
+            {
+                playerSkillManager.PrintAutoSkillStatus();
+            }
+        }
+
+        [ContextMenu("테스트: 보유 스킬 출력")]
+        private void TestPrintOwnedSkills()
+        {
+            if (playerSkillManager != null)
+            {
+                playerSkillManager.PrintOwnedSkills();
+            }
         }
 
         // 기즈모로 고정 위치 표시
