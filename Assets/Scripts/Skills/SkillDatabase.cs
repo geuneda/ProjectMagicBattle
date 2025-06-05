@@ -151,7 +151,6 @@ namespace MagicBattle.Skills
             // skillsByGrade가 null인 경우 방어적 처리
             if (skillsByGrade == null)
             {
-                Debug.LogError("SkillDatabase: skillsByGrade가 초기화되지 않았습니다. 재초기화를 시도합니다.");
                 BuildSkillMaps();
                 
                 if (skillsByGrade == null)

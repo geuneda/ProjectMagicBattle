@@ -88,7 +88,7 @@ namespace MagicBattle.UI
             // GameManager 골드 이벤트 구독
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.OnGoldChanged.AddListener(OnGoldChanged);
+                EventManager.Subscribe(GameEventType.GoldChanged, OnGoldChanged);
             }
         }
 
@@ -452,7 +452,7 @@ namespace MagicBattle.UI
         /// 골드 변경 시 호출되는 콜백
         /// </summary>
         /// <param name="newGoldAmount">새로운 골드 양</param>
-        private void OnGoldChanged(int newGoldAmount)
+        private void OnGoldChanged(object args)
         {
             UpdateGoldDisplay();
             UpdateDrawCost(); // 골드에 따른 버튼 활성화 상태도 업데이트
@@ -510,7 +510,7 @@ namespace MagicBattle.UI
             // 이벤트 구독 해제
             if (GameManager.Instance != null)
             {
-                GameManager.Instance.OnGoldChanged.RemoveListener(OnGoldChanged);
+                EventManager.Unsubscribe(GameEventType.GoldChanged, OnGoldChanged);
             }
         }
     }

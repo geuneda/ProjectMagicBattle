@@ -64,21 +64,15 @@ namespace MagicBattle.Monster
         /// </summary>
         private void SubscribeToWaveEvents()
         {
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnMonsterShouldSpawn.AddListener(SpawnMonster);
-                GameManager.Instance.OnWaveChanged.AddListener(OnWaveChanged);
-                GameManager.Instance.OnWaveStateChanged.AddListener(OnWaveStateChanged);
-                
-                // 현재 웨이브 정보 동기화
-                UpdateWaveInfo();
-                
-                Debug.Log("웨이브 이벤트 구독 완료");
-            }
-            else
-            {
-                Debug.LogError("GameManager.Instance가 null입니다!");
-            }
+            // EventManager를 통한 웨이브 이벤트 구독
+            EventManager.Subscribe(GameEventType.MonsterShouldSpawn, OnMonsterShouldSpawn);
+            EventManager.Subscribe(GameEventType.WaveChanged, OnWaveChanged);
+            EventManager.Subscribe(GameEventType.WaveStateChanged, OnWaveStateChanged);
+            
+            // 현재 웨이브 정보 동기화
+            UpdateWaveInfo();
+            
+            Debug.Log("웨이브 이벤트 구독 완료");
         }
 
         /// <summary>
@@ -86,41 +80,51 @@ namespace MagicBattle.Monster
         /// </summary>
         private void UnsubscribeFromWaveEvents()
         {
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnMonsterShouldSpawn.RemoveListener(SpawnMonster);
-                GameManager.Instance.OnWaveChanged.RemoveListener(OnWaveChanged);
-                GameManager.Instance.OnWaveStateChanged.RemoveListener(OnWaveStateChanged);
-            }
+            // EventManager를 통한 웨이브 이벤트 구독 해제
+            EventManager.Unsubscribe(GameEventType.MonsterShouldSpawn, OnMonsterShouldSpawn);
+            EventManager.Unsubscribe(GameEventType.WaveChanged, OnWaveChanged);
+            EventManager.Unsubscribe(GameEventType.WaveStateChanged, OnWaveStateChanged);
         }
 
         /// <summary>
         /// 웨이브 변경 이벤트 핸들러
         /// </summary>
-        /// <param name="waveNumber">새로운 웨이브 번호</param>
-        private void OnWaveChanged(int waveNumber)
+        /// <param name="args">새로운 웨이브 번호</param>
+        private void OnWaveChanged(object args)
         {
-            currentWave = waveNumber;
-            UpdateWaveInfo();
-            Debug.Log($"몬스터 스포너: 웨이브 {waveNumber} 시작");
+            if (args is int waveNumber)
+            {
+                currentWave = waveNumber;
+                UpdateWaveInfo();
+                Debug.Log($"몬스터 스포너: 웨이브 {waveNumber} 시작");
+            }
         }
 
         /// <summary>
         /// 웨이브 상태 변경 이벤트 핸들러
         /// </summary>
-        /// <param name="waveState">새로운 웨이브 상태</param>
-        private void OnWaveStateChanged(WaveState waveState)
+        /// <param name="args">새로운 웨이브 상태</param>
+        private void OnWaveStateChanged(object args)
         {
-            currentWaveState = waveState;
-            
-            switch (waveState)
+            if (args is WaveState waveState)
             {
-                case WaveState.Spawning:
-                    Debug.Log($"웨이브 {currentWave}: 몬스터 스폰 시작");
-                    break;
-                case WaveState.Rest:
-                    Debug.Log($"웨이브 {currentWave}: 휴식 시간 시작");
-                    break;
+                currentWaveState = waveState;
+                
+                switch (waveState)
+                {
+                    case WaveState.Spawning:
+                        Debug.Log($"웨이브 {currentWave}: 몬스터 스폰 시작");
+                        break;
+                    case WaveState.Preparing:
+                        Debug.Log($"웨이브 {currentWave}: 준비 시간 시작");
+                        break;
+                    case WaveState.Fighting:
+                        Debug.Log($"웨이브 {currentWave}: 전투 시간 시작");
+                        break;
+                    case WaveState.Completed:
+                        Debug.Log($"웨이브 {currentWave}: 웨이브 완료");
+                        break;
+                }
             }
         }
 
@@ -138,7 +142,16 @@ namespace MagicBattle.Monster
         }
 
         /// <summary>
-        /// 몬스터 스폰 (GameManager 요청 시에만 호출)
+        /// 몬스터 스폰 이벤트 핸들러
+        /// </summary>
+        /// <param name="args">이벤트 파라미터 (사용하지 않음)</param>
+        private void OnMonsterShouldSpawn(object args)
+        {
+            SpawnMonster();
+        }
+
+        /// <summary>
+        /// 몬스터 스폰 처리
         /// </summary>
         private void SpawnMonster()
         {

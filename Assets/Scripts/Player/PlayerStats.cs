@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.Events;
 using MagicBattle.Common;
+using MagicBattle.Managers;
+using System.Collections.Generic;
 
 namespace MagicBattle.Player
 {
@@ -18,11 +20,11 @@ namespace MagicBattle.Player
         [Header("상태")]
         [SerializeField] private PlayerState currentState = PlayerState.Idle;
 
-        // 이벤트
-        public UnityEvent<float, float> OnHealthChanged; // 현재체력, 최대체력
-        public UnityEvent OnPlayerDeath;
-        public UnityEvent<float> OnDamageTaken; // 받은 데미지
-        public UnityEvent<PlayerState> OnStateChanged; // 상태 변경
+        // 이벤트는 EventManager를 통해 관리됩니다
+        // GameEventType.PlayerHealthChanged (현재체력, 최대체력)
+        // GameEventType.PlayerDied
+        // GameEventType.PlayerDamageTaken (받은 데미지)
+        // GameEventType.PlayerStateChanged (상태 변경)
 
         // 프로퍼티
         public float MaxHealth => maxHealth;
@@ -43,7 +45,12 @@ namespace MagicBattle.Player
         private void InitializeStats()
         {
             currentHealth = maxHealth;
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth }
+            };
+            EventManager.Dispatch(GameEventType.PlayerHealthChanged, healthData);
         }
 
         /// <summary>
@@ -57,8 +64,14 @@ namespace MagicBattle.Player
             float actualDamage = Mathf.Max(0f, damage);
             currentHealth = Mathf.Max(0f, currentHealth - actualDamage);
 
-            OnDamageTaken?.Invoke(actualDamage);
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            EventManager.Dispatch(GameEventType.PlayerDamageTaken, actualDamage);
+            
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth }
+            };
+            EventManager.Dispatch(GameEventType.PlayerHealthChanged, healthData);
 
             // 체력이 0이 되면 사망 처리
             if (currentHealth <= 0f)
@@ -77,7 +90,13 @@ namespace MagicBattle.Player
 
             float actualHeal = Mathf.Max(0f, healAmount);
             currentHealth = Mathf.Min(maxHealth, currentHealth + actualHeal);
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth }
+            };
+            EventManager.Dispatch(GameEventType.PlayerHealthChanged, healthData);
         }
 
         /// <summary>
@@ -88,7 +107,13 @@ namespace MagicBattle.Player
         {
             maxHealth += increaseAmount;
             currentHealth += increaseAmount; // 최대 체력 증가 시 현재 체력도 함께 증가
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth }
+            };
+            EventManager.Dispatch(GameEventType.PlayerHealthChanged, healthData);
         }
 
         /// <summary>
@@ -121,7 +146,7 @@ namespace MagicBattle.Player
             currentState = newState;
 
             // 상태 변경 이벤트 발생
-            OnStateChanged?.Invoke(newState);
+            EventManager.Dispatch(GameEventType.PlayerStateChanged, newState);
 
             // 상태 변경 로그 (디버깅용)
             Debug.Log($"플레이어 상태 변경: {previousState} → {currentState}");
@@ -133,7 +158,7 @@ namespace MagicBattle.Player
         private void Die()
         {
             ChangeState(PlayerState.Dead);
-            OnPlayerDeath?.Invoke();
+            EventManager.Dispatch(GameEventType.PlayerDied);
             Debug.Log("플레이어가 사망했습니다!");
         }
 
@@ -152,7 +177,13 @@ namespace MagicBattle.Player
         public void FullHeal()
         {
             currentHealth = maxHealth;
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth }
+            };
+            EventManager.Dispatch(GameEventType.PlayerHealthChanged, healthData);
         }
 
         /// <summary>
@@ -162,7 +193,13 @@ namespace MagicBattle.Player
         {
             currentHealth = maxHealth;
             ChangeState(PlayerState.Idle);
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth }
+            };
+            EventManager.Dispatch(GameEventType.PlayerHealthChanged, healthData);
         }
 
         #region 에디터에서 디버깅용

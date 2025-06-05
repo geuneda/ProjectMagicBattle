@@ -1,5 +1,6 @@
 using UnityEngine;
 using MagicBattle.Common;
+using MagicBattle.Managers;
 
 namespace MagicBattle.Player
 {
@@ -69,12 +70,10 @@ namespace MagicBattle.Player
         /// </summary>
         private void SubscribeToEvents()
         {
-            if (playerStats != null)
-            {
-                playerStats.OnStateChanged.AddListener(OnPlayerStateChanged);
-                playerStats.OnPlayerDeath.AddListener(OnPlayerDeath);
-                playerStats.OnDamageTaken.AddListener(OnPlayerHit);
-            }
+            // EventManager를 통한 플레이어 이벤트 구독
+            EventManager.Subscribe(GameEventType.PlayerStateChanged, OnPlayerStateChanged);
+            EventManager.Subscribe(GameEventType.PlayerDied, OnPlayerDied);
+            EventManager.Subscribe(GameEventType.PlayerDamageTaken, OnPlayerDamageTaken);
         }
 
         /// <summary>
@@ -82,36 +81,37 @@ namespace MagicBattle.Player
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            if (playerStats != null)
-            {
-                playerStats.OnStateChanged.RemoveListener(OnPlayerStateChanged);
-                playerStats.OnPlayerDeath.RemoveListener(OnPlayerDeath);
-                playerStats.OnDamageTaken.RemoveListener(OnPlayerHit);
-            }
+            // EventManager를 통한 플레이어 이벤트 구독 해제
+            EventManager.Unsubscribe(GameEventType.PlayerStateChanged, OnPlayerStateChanged);
+            EventManager.Unsubscribe(GameEventType.PlayerDied, OnPlayerDied);
+            EventManager.Unsubscribe(GameEventType.PlayerDamageTaken, OnPlayerDamageTaken);
         }
 
         #region 애니메이션 상태 제어
         /// <summary>
         /// 플레이어 상태 변경 시 호출되는 콜백
         /// </summary>
-        /// <param name="newState">새로운 상태</param>
-        private void OnPlayerStateChanged(PlayerState newState)
+        /// <param name="args">이벤트 데이터 (새로운 상태)</param>
+        private void OnPlayerStateChanged(object args)
         {
             if (isDead) return; // 사망 상태에서는 다른 애니메이션 무시
 
-            currentState = newState;
-
-            switch (newState)
+            if (args is PlayerState newState)
             {
-                case PlayerState.Idle:
-                    SetIdleState();
-                    break;
-                case PlayerState.Attacking:
-                    PlayAttackAnimation();
-                    break;
-                case PlayerState.UsingSkill:
-                    PlaySkillAnimation();
-                    break;
+                currentState = newState;
+
+                switch (newState)
+                {
+                    case PlayerState.Idle:
+                        SetIdleState();
+                        break;
+                    case PlayerState.Attacking:
+                        PlayAttackAnimation();
+                        break;
+                    case PlayerState.UsingSkill:
+                        PlaySkillAnimation();
+                        break;
+                }
             }
         }
 
@@ -157,8 +157,8 @@ namespace MagicBattle.Player
         /// <summary>
         /// 피격 애니메이션 재생
         /// </summary>
-        /// <param name="damage">받은 데미지 (사용하지 않지만 이벤트 호환성을 위해 유지)</param>
-        private void OnPlayerHit(float damage)
+        /// <param name="args">이벤트 데이터 (받은 데미지)</param>
+        private void OnPlayerDamageTaken(object args)
         {
             if (animator == null || isDead) return;
 
@@ -168,7 +168,8 @@ namespace MagicBattle.Player
         /// <summary>
         /// 사망 애니메이션 재생
         /// </summary>
-        private void OnPlayerDeath()
+        /// <param name="args">이벤트 데이터 (사용하지 않음)</param>
+        private void OnPlayerDied(object args)
         {
             if (animator == null) return;
 

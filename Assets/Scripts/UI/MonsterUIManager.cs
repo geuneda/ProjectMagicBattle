@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using MagicBattle.Monster;
 using MagicBattle.Common;
+using MagicBattle.Managers;
 
 namespace MagicBattle.UI
 {
@@ -189,8 +190,20 @@ namespace MagicBattle.UI
             // 활성 체력바 추적에 추가
             activeHealthBars[monsterStats] = healthBarUI;
 
-            // 몬스터 사망 시 체력바 반환을 위한 이벤트 연결
-            monsterStats.OnMonsterDeath.AddListener(OnMonsterDeath);
+            // 몬스터 사망 이벤트 구독
+            EventManager.Subscribe(GameEventType.MonsterDied, OnMonsterDiedEvent);
+        }
+
+        /// <summary>
+        /// 몬스터 사망 시 체력바 반환 (EventManager 이벤트 핸들러)
+        /// </summary>
+        /// <param name="args">사망한 몬스터</param>
+        private void OnMonsterDiedEvent(object args)
+        {
+            if (args is MonsterStats deadMonster)
+            {
+                OnMonsterDeath(deadMonster);
+            }
         }
 
         /// <summary>
@@ -236,12 +249,6 @@ namespace MagicBattle.UI
         private void ReturnHealthBarToPool(MonsterStats monsterStats, MonsterHealthBarUI healthBarUI)
         {
             if (healthBarUI == null) return;
-
-            // 이벤트 구독 해제
-            if (monsterStats != null)
-            {
-                monsterStats.OnMonsterDeath.RemoveListener(OnMonsterDeath);
-            }
 
             // 체력바 비활성화 및 풀로 반환
             healthBarUI.ForceHide();
@@ -353,6 +360,9 @@ namespace MagicBattle.UI
 
         private void OnDestroy()
         {
+            // EventManager 이벤트 구독 해제
+            EventManager.Unsubscribe(GameEventType.MonsterDied, OnMonsterDiedEvent);
+
             // 모든 UI 정리
             ClearAllUI();
 

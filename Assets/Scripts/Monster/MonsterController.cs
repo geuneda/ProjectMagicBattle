@@ -2,6 +2,7 @@ using UnityEngine;
 using MagicBattle.Common;
 using MagicBattle.Managers;
 using MagicBattle.UI;
+using System.Collections.Generic;
 
 namespace MagicBattle.Monster
 {
@@ -97,15 +98,13 @@ namespace MagicBattle.Monster
         /// </summary>
         private void SubscribeToEvents()
         {
-            if (monsterStats != null)
-            {
-                monsterStats.OnMonsterDeath.AddListener(OnMonsterDeath);
-                monsterStats.OnHealthChanged.AddListener(OnHealthChanged);
-                monsterStats.OnDamageTaken.AddListener(OnDamageTaken);
-                monsterStats.OnDamageTakenWithAttribute.AddListener(OnDamageTakenWithAttribute);
-                monsterStats.OnStateChanged.AddListener(OnStateChanged);
-                monsterStats.OnFirstHit.AddListener(OnFirstHit);
-            }
+            // EventManager를 통한 몬스터 이벤트 구독
+            EventManager.Subscribe(GameEventType.MonsterDied, OnMonsterDied);
+            EventManager.Subscribe(GameEventType.MonsterHealthChanged, OnMonsterHealthChanged);
+            EventManager.Subscribe(GameEventType.MonsterDamageTaken, OnMonsterDamageTaken);
+            EventManager.Subscribe(GameEventType.MonsterDamageTakenWithAttribute, OnMonsterDamageTakenWithAttribute);
+            EventManager.Subscribe(GameEventType.MonsterStateChanged, OnMonsterStateChanged);
+            EventManager.Subscribe(GameEventType.MonsterFirstHit, OnMonsterFirstHit);
         }
 
         /// <summary>
@@ -113,121 +112,145 @@ namespace MagicBattle.Monster
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            if (monsterStats != null)
-            {
-                monsterStats.OnMonsterDeath.RemoveListener(OnMonsterDeath);
-                monsterStats.OnHealthChanged.RemoveListener(OnHealthChanged);
-                monsterStats.OnDamageTaken.RemoveListener(OnDamageTaken);
-                monsterStats.OnDamageTakenWithAttribute.RemoveListener(OnDamageTakenWithAttribute);
-                monsterStats.OnStateChanged.RemoveListener(OnStateChanged);
-                monsterStats.OnFirstHit.RemoveListener(OnFirstHit);
-            }
+            // EventManager를 통한 몬스터 이벤트 구독 해제
+            EventManager.Unsubscribe(GameEventType.MonsterDied, OnMonsterDied);
+            EventManager.Unsubscribe(GameEventType.MonsterHealthChanged, OnMonsterHealthChanged);
+            EventManager.Unsubscribe(GameEventType.MonsterDamageTaken, OnMonsterDamageTaken);
+            EventManager.Unsubscribe(GameEventType.MonsterDamageTakenWithAttribute, OnMonsterDamageTakenWithAttribute);
+            EventManager.Unsubscribe(GameEventType.MonsterStateChanged, OnMonsterStateChanged);
+            EventManager.Unsubscribe(GameEventType.MonsterFirstHit, OnMonsterFirstHit);
         }
 
         #region 이벤트 핸들러
         /// <summary>
         /// 몬스터 사망 시 호출되는 함수
         /// </summary>
-        /// <param name="deadMonster">사망한 몬스터의 Stats</param>
-        private void OnMonsterDeath(MonsterStats deadMonster)
+        /// <param name="args">사망한 몬스터의 Stats</param>
+        private void OnMonsterDied(object args)
         {
-            // 사망 시각 효과
-            if (spriteRenderer != null)
+            if (args is MonsterStats deadMonster && deadMonster == monsterStats)
             {
-                // 죽음 효과 (예: 페이드 아웃, 깜빡임 등)
-                spriteRenderer.color = Color.gray;
-            }
+                // 사망 시각 효과
+                if (spriteRenderer != null)
+                {
+                    // 죽음 효과 (예: 페이드 아웃, 깜빡임 등)
+                    spriteRenderer.color = Color.gray;
+                }
 
-            // AI 중지
-            if (monsterAI != null)
-            {
-                monsterAI.SetAIEnabled(false);
-            }
+                // AI 중지
+                if (monsterAI != null)
+                {
+                    monsterAI.SetAIEnabled(false);
+                }
 
-            // 잠시 후 오브젝트 반환/비활성화
-            Invoke(nameof(DeactivateMonster), 0.5f);
+                // 잠시 후 오브젝트 반환/비활성화
+                Invoke(nameof(DeactivateMonster), 0.5f);
+            }
         }
 
         /// <summary>
         /// 체력 변화 시 호출되는 함수
         /// </summary>
-        /// <param name="currentHealth">현재 체력</param>
-        /// <param name="maxHealth">최대 체력</param>
-        private void OnHealthChanged(float currentHealth, float maxHealth)
+        /// <param name="args">현재 체력, 최대 체력, 몬스터 인스턴스</param>
+        private void OnMonsterHealthChanged(object args)
         {
-            // 체력에 따른 시각적 효과
-            if (spriteRenderer != null)
+            Dictionary<string, object> data = args as Dictionary<string, object>;
+            if (data != null && ReferenceEquals(data["monster"], monsterStats))
             {
-                float healthPercent = maxHealth > 0 ? currentHealth / maxHealth : 0f;
-                
-                // 체력이 낮을수록 어둡게
-                Color baseColor = Color.red;
-                spriteRenderer.color = Color.Lerp(Color.gray, baseColor, healthPercent);
+                float currentHealth = (float)data["current"];
+                float maxHealth = (float)data["max"];
+
+                // 체력에 따른 시각적 효과
+                if (spriteRenderer != null)
+                {
+                    float healthPercent = maxHealth > 0 ? currentHealth / maxHealth : 0f;
+                    
+                    // 체력이 낮을수록 어둡게
+                    Color baseColor = Color.red;
+                    spriteRenderer.color = Color.Lerp(Color.gray, baseColor, healthPercent);
+                }
             }
         }
 
         /// <summary>
         /// 데미지를 받았을 때 호출되는 함수
         /// </summary>
-        /// <param name="damage">받은 데미지</param>
-        private void OnDamageTaken(float damage)
+        /// <param name="args">받은 데미지, 몬스터 인스턴스</param>
+        private void OnMonsterDamageTaken(object args)
         {
-            // 데미지 받은 시각적 효과
-            if (spriteRenderer != null)
+            Dictionary<string, object> data = args as Dictionary<string, object>;
+            if (data != null && ReferenceEquals(data["monster"], monsterStats))
             {
-                // 잠깐 흰색으로 플래시
-                StartCoroutine(FlashWhite());
+                // 데미지 받은 시각적 효과
+                if (spriteRenderer != null)
+                {
+                    // 잠깐 흰색으로 플래시
+                    StartCoroutine(FlashWhite());
+                }
             }
         }
 
         /// <summary>
         /// 속성별 데미지를 받았을 때 호출되는 함수
         /// </summary>
-        /// <param name="damage">받은 데미지</param>
-        /// <param name="attribute">공격 속성</param>
-        private void OnDamageTakenWithAttribute(float damage, SkillAttribute attribute)
+        /// <param name="args">받은 데미지, 속성, 몬스터 인스턴스</param>
+        private void OnMonsterDamageTakenWithAttribute(object args)
         {
-            // 일반 데미지 이벤트도 호출
-            OnDamageTaken(damage);
-
-            // 데미지 텍스트 표시
-            if (MonsterUIManager.Instance != null)
+            Dictionary<string, object> data = args as Dictionary<string, object>;
+            if (data != null && ReferenceEquals(data["monster"], monsterStats))
             {
-                Vector3 damagePosition = transform.position + Vector3.up * 0.5f; // 몬스터 위쪽에 표시
-                MonsterUIManager.Instance.ShowDamageText(damage, attribute, damagePosition);
+                float damage = (float)data["damage"];
+                SkillAttribute attribute = (SkillAttribute)data["attribute"];
+
+                // 데미지 텍스트 표시
+                if (MonsterUIManager.Instance != null)
+                {
+                    Vector3 damagePosition = transform.position + Vector3.up * 0.5f; // 몬스터 위쪽에 표시
+                    MonsterUIManager.Instance.ShowDamageText(damage, attribute, damagePosition);
+                }
             }
         }
 
         /// <summary>
         /// 첫 피격 시 호출되는 함수 (체력바 표시)
         /// </summary>
-        private void OnFirstHit()
+        /// <param name="args">몬스터 인스턴스</param>
+        private void OnMonsterFirstHit(object args)
         {
-            // 체력바 할당 및 표시
-            if (MonsterUIManager.Instance != null)
+            if (args is MonsterStats monster && monster == monsterStats)
             {
-                MonsterUIManager.Instance.AssignHealthBar(monsterStats);
+                // 체력바 할당 및 표시
+                if (MonsterUIManager.Instance != null)
+                {
+                    MonsterUIManager.Instance.AssignHealthBar(monsterStats);
+                }
             }
         }
 
         /// <summary>
         /// 몬스터 상태 변경 시 호출되는 함수
         /// </summary>
-        /// <param name="newState">새로운 상태</param>
-        private void OnStateChanged(MonsterState newState)
+        /// <param name="args">상태, 몬스터 인스턴스</param>
+        private void OnMonsterStateChanged(object args)
         {
-            // 상태에 따른 시각적 변화나 로직 처리
-            switch (newState)
+            Dictionary<string, object> data = args as Dictionary<string, object>;
+            if (data != null && ReferenceEquals(data["monster"], monsterStats))
             {
-                case MonsterState.Moving:
-                    // 이동 상태 처리
-                    break;
-                case MonsterState.Attacking:
-                    // 공격 상태 처리
-                    break;
-                case MonsterState.Dead:
-                    // 사망 상태 처리
-                    break;
+                MonsterState newState = (MonsterState)data["state"];
+
+                // 상태에 따른 시각적 변화나 로직 처리
+                switch (newState)
+                {
+                    case MonsterState.Moving:
+                        // 이동 상태 처리
+                        break;
+                    case MonsterState.Attacking:
+                        // 공격 상태 처리
+                        break;
+                    case MonsterState.Dead:
+                        // 사망 상태 처리
+                        break;
+                }
             }
         }
         #endregion

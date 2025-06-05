@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using MagicBattle.Managers;
 using MagicBattle.Player;
+using MagicBattle.Common;
+using System.Collections.Generic;
 
 namespace MagicBattle.UI
 {
@@ -90,27 +92,15 @@ namespace MagicBattle.UI
         /// </summary>
         private void SetupEvents()
         {
-            // PlayerStats 이벤트 구독
-            if (playerStats != null)
-            {
-                playerStats.OnHealthChanged.AddListener(UpdateHealthUI);
-                playerStats.OnPlayerDeath.AddListener(OnPlayerDeath);
-            }
-
-            // GameManager 웨이브 이벤트 구독
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnWaveChanged.AddListener(OnWaveChanged);
-                GameManager.Instance.OnWaveTimerUpdated.AddListener(OnWaveTimerUpdated);
-                GameManager.Instance.OnWaveStateChanged.AddListener(OnWaveStateChanged);
-                
-                // 현재 웨이브 정보 동기화
-                SyncWithGameManager();
-            }
-            else
-            {
-                Debug.LogError("GameManager.Instance가 null입니다!");
-            }
+            // EventManager를 통한 이벤트 구독
+            EventManager.Subscribe(GameEventType.PlayerHealthChanged, OnPlayerHealthChanged);
+            EventManager.Subscribe(GameEventType.PlayerDied, OnPlayerDied);
+            EventManager.Subscribe(GameEventType.WaveChanged, OnWaveChanged);
+            EventManager.Subscribe(GameEventType.WaveTimerUpdated, OnWaveTimerUpdated);
+            EventManager.Subscribe(GameEventType.WaveStateChanged, OnWaveStateChanged);
+            
+            // 현재 웨이브 정보 동기화
+            SyncWithGameManager();
         }
 
         /// <summary>
@@ -133,31 +123,40 @@ namespace MagicBattle.UI
         /// <summary>
         /// 웨이브 변경 이벤트 핸들러
         /// </summary>
-        /// <param name="waveNumber">새로운 웨이브 번호</param>
-        private void OnWaveChanged(int waveNumber)
+        /// <param name="args">새로운 웨이브 번호</param>
+        private void OnWaveChanged(object args)
         {
-            currentWave = waveNumber;
-            UpdateWaveUI();
+            if (args is int waveNumber)
+            {
+                currentWave = waveNumber;
+                UpdateWaveUI();
+            }
         }
 
         /// <summary>
         /// 웨이브 타이머 업데이트 이벤트 핸들러
         /// </summary>
-        /// <param name="remainingTime">남은 시간</param>
-        private void OnWaveTimerUpdated(float remainingTime)
+        /// <param name="args">남은 시간</param>
+        private void OnWaveTimerUpdated(object args)
         {
-            waveTimer = remainingTime;
-            UpdateWaveTimerUI();
+            if (args is float remainingTime)
+            {
+                waveTimer = remainingTime;
+                UpdateWaveTimerUI();
+            }
         }
 
         /// <summary>
         /// 웨이브 상태 변경 이벤트 핸들러
         /// </summary>
-        /// <param name="waveState">새로운 웨이브 상태</param>
-        private void OnWaveStateChanged(WaveState waveState)
+        /// <param name="args">새로운 웨이브 상태</param>
+        private void OnWaveStateChanged(object args)
         {
-            currentWaveState = waveState;
-            UpdateWaveStateUI();
+            if (args is WaveState waveState)
+            {
+                currentWaveState = waveState;
+                UpdateWaveStateUI();
+            }
         }
 
         /// <summary>
@@ -218,8 +217,9 @@ namespace MagicBattle.UI
                 string stateText = currentWaveState switch
                 {
                     WaveState.Spawning => "몬스터 출현",
-                    WaveState.Rest => "휴식 시간",
-                    WaveState.WaveCompleted => "웨이브 완료",
+                    WaveState.Preparing => "준비 시간",
+                    WaveState.Fighting => "전투 중",
+                    WaveState.Completed => "웨이브 완료",
                     _ => "알 수 없음"
                 };
                 
@@ -229,36 +229,44 @@ namespace MagicBattle.UI
                 waveStateText.color = currentWaveState switch
                 {
                     WaveState.Spawning => Color.red,
-                    WaveState.Rest => Color.green,
-                    WaveState.WaveCompleted => Color.cyan,
+                    WaveState.Preparing => Color.green,
+                    WaveState.Fighting => Color.yellow,
+                    WaveState.Completed => Color.cyan,
                     _ => Color.white
                 };
             }
         }
 
         /// <summary>
-        /// 체력 UI 업데이트
+        /// 플레이어 체력 변경 이벤트 핸들러
         /// </summary>
-        /// <param name="currentHealth">현재 체력</param>
-        /// <param name="maxHealth">최대 체력</param>
-        private void UpdateHealthUI(float currentHealth, float maxHealth)
+        /// <param name="args">현재 체력, 최대 체력 데이터</param>
+        private void OnPlayerHealthChanged(object args)
         {
-            if (healthSlider != null)
+            Dictionary<string, object> data = args as Dictionary<string, object>;
+            if (data != null)
             {
-                healthSlider.maxValue = maxHealth;
-                healthSlider.value = currentHealth;
-            }
+                float currentHealth = (float)data["current"];
+                float maxHealth = (float)data["max"];
 
-            if (healthText != null)
-            {
-                healthText.text = $"{currentHealth:F0}/{maxHealth:F0}";
+                if (healthSlider != null)
+                {
+                    healthSlider.maxValue = maxHealth;
+                    healthSlider.value = currentHealth;
+                }
+
+                if (healthText != null)
+                {
+                    healthText.text = $"{currentHealth:F0}/{maxHealth:F0}";
+                }
             }
         }
 
         /// <summary>
         /// 플레이어 사망 이벤트 핸들러
         /// </summary>
-        private void OnPlayerDeath()
+        /// <param name="args">이벤트 데이터 (사용하지 않음)</param>
+        private void OnPlayerDied(object args)
         {
             Debug.Log("플레이어가 사망했습니다!");
             ShowGameOverUI();
@@ -307,20 +315,12 @@ namespace MagicBattle.UI
 
         private void OnDestroy()
         {
-            // PlayerStats 이벤트 구독 해제
-            if (playerStats != null)
-            {
-                playerStats.OnHealthChanged.RemoveListener(UpdateHealthUI);
-                playerStats.OnPlayerDeath.RemoveListener(OnPlayerDeath);
-            }
-
-            // GameManager 이벤트 구독 해제
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnWaveChanged.RemoveListener(OnWaveChanged);
-                GameManager.Instance.OnWaveTimerUpdated.RemoveListener(OnWaveTimerUpdated);
-                GameManager.Instance.OnWaveStateChanged.RemoveListener(OnWaveStateChanged);
-            }
+            // EventManager를 통한 이벤트 구독 해제
+            EventManager.Unsubscribe(GameEventType.PlayerHealthChanged, OnPlayerHealthChanged);
+            EventManager.Unsubscribe(GameEventType.PlayerDied, OnPlayerDied);
+            EventManager.Unsubscribe(GameEventType.WaveChanged, OnWaveChanged);
+            EventManager.Unsubscribe(GameEventType.WaveTimerUpdated, OnWaveTimerUpdated);
+            EventManager.Unsubscribe(GameEventType.WaveStateChanged, OnWaveStateChanged);
         }
     }
 } 

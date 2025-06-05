@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using MagicBattle.Common;
 
 public delegate void EventListener(object args);
 
@@ -32,14 +33,14 @@ public static class EventManager
     }
 
     // 이벤트 리스너를 저장해주는 Dictionary (캐시 최적화 버전)
-    private static readonly Dictionary<EnumTypes.GameEventType, EventListenerEntry> eventListenerDic = new Dictionary<EnumTypes.GameEventType, EventListenerEntry>();
+    private static readonly Dictionary<GameEventType, EventListenerEntry> eventListenerDic = new Dictionary<GameEventType, EventListenerEntry>();
 
     /// <summary>
     /// 이벤트 리스너 등록
     /// </summary>
     /// <param name="type">구독할 이벤트 타입</param>
     /// <param name="listener">콜백 함수</param>
-    public static void Subscribe(EnumTypes.GameEventType type, EventListener listener)
+    public static void Subscribe(GameEventType type, EventListener listener)
     {
         if (!eventListenerDic.TryGetValue(type, out EventListenerEntry entry))
         {
@@ -56,7 +57,7 @@ public static class EventManager
     /// </summary>
     /// <param name="type">구독 해제할 이벤트 타입</param>
     /// <param name="listener">제거할 콜백 함수</param>
-    public static void Unsubscribe(EnumTypes.GameEventType type, EventListener listener)
+    public static void Unsubscribe(GameEventType type, EventListener listener)
     {
         if (!eventListenerDic.TryGetValue(type, out EventListenerEntry entry))
         {
@@ -79,7 +80,7 @@ public static class EventManager
     /// </summary>
     /// <param name="type">발생시킬 이벤트 타입</param>
     /// <param name="arg">전달할 데이터 객체</param>
-    public static void Dispatch(EnumTypes.GameEventType type, object arg = null)
+    public static void Dispatch(GameEventType type, object arg = null)
     {
         if (!eventListenerDic.TryGetValue(type, out EventListenerEntry entry))
         {

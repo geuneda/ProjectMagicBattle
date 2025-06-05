@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using MagicBattle.Common;
 using MagicBattle.Managers;
+using System.Collections.Generic;
 
 namespace MagicBattle.Monster
 {
@@ -32,13 +33,13 @@ namespace MagicBattle.Monster
         // 피격 관련 변수 (체력바 표시용)
         private bool hasBeenHit = false;
 
-        // 이벤트
-        public UnityEvent<float, float> OnHealthChanged; // 현재체력, 최대체력
-        public UnityEvent<MonsterStats> OnMonsterDeath; // 사망한 몬스터 정보
-        public UnityEvent<float> OnDamageTaken; // 받은 데미지
-        public UnityEvent<float, SkillAttribute> OnDamageTakenWithAttribute; // 받은 데미지, 속성
-        public UnityEvent<MonsterState> OnStateChanged; // 상태 변경
-        public UnityEvent OnFirstHit; // 첫 피격 시 (체력바 표시용)
+        // 이벤트는 EventManager를 통해 관리됩니다
+        // GameEventType.MonsterHealthChanged (현재체력, 최대체력, 몬스터 인스턴스)
+        // GameEventType.MonsterDied (사망한 몬스터 인스턴스)
+        // GameEventType.MonsterDamageTaken (받은 데미지, 몬스터 인스턴스)
+        // GameEventType.MonsterDamageTakenWithAttribute (받은 데미지, 속성, 몬스터 인스턴스)
+        // GameEventType.MonsterStateChanged (상태, 몬스터 인스턴스)
+        // GameEventType.MonsterFirstHit (몬스터 인스턴스)
 
         // 프로퍼티
         public float MaxHealth => maxHealth;
@@ -69,7 +70,14 @@ namespace MagicBattle.Monster
         {
             currentHealth = maxHealth;
             hasBeenHit = false;
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth },
+                { "monster", this }
+            };
+            EventManager.Dispatch(GameEventType.MonsterHealthChanged, healthData);
         }
 
         /// <summary>
@@ -108,13 +116,32 @@ namespace MagicBattle.Monster
             if (!hasBeenHit)
             {
                 hasBeenHit = true;
-                OnFirstHit?.Invoke(); // 체력바 표시 트리거
+                EventManager.Dispatch(GameEventType.MonsterFirstHit, this); // 체력바 표시 트리거
             }
 
             // 이벤트 호출
-            OnDamageTaken?.Invoke(actualDamage);
-            OnDamageTakenWithAttribute?.Invoke(actualDamage, attribute);
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            Dictionary<string, object> damageData = new Dictionary<string, object>
+            {
+                { "damage", actualDamage },
+                { "monster", this }
+            };
+            EventManager.Dispatch(GameEventType.MonsterDamageTaken, damageData);
+
+            Dictionary<string, object> attributeData = new Dictionary<string, object>
+            {
+                { "damage", actualDamage },
+                { "attribute", attribute },
+                { "monster", this }
+            };
+            EventManager.Dispatch(GameEventType.MonsterDamageTakenWithAttribute, attributeData);
+
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth },
+                { "monster", this }
+            };
+            EventManager.Dispatch(GameEventType.MonsterHealthChanged, healthData);
 
             // 체력이 0이 되면 사망 처리
             if (currentHealth <= 0f)
@@ -178,7 +205,13 @@ namespace MagicBattle.Monster
 
             MonsterState previousState = currentState;
             currentState = newState;
-            OnStateChanged?.Invoke(newState);
+            
+            Dictionary<string, object> stateData = new Dictionary<string, object>
+            {
+                { "state", newState },
+                { "monster", this }
+            };
+            EventManager.Dispatch(GameEventType.MonsterStateChanged, stateData);
 
             // Debug.Log($"몬스터 상태 변경: {previousState} → {newState}");
         }
@@ -189,7 +222,7 @@ namespace MagicBattle.Monster
         private void Die()
         {
             ChangeState(MonsterState.Dead);
-            OnMonsterDeath?.Invoke(this);
+            EventManager.Dispatch(GameEventType.MonsterDied, this);
 
             // GameManager에 몬스터 처치 알림
             if (GameManager.Instance != null)
@@ -209,7 +242,14 @@ namespace MagicBattle.Monster
             hasBeenHit = false;
             ChangeState(MonsterState.Moving);
             lastAttackTime = 0f;
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth },
+                { "monster", this }
+            };
+            EventManager.Dispatch(GameEventType.MonsterHealthChanged, healthData);
         }
 
         /// <summary>
@@ -225,7 +265,13 @@ namespace MagicBattle.Monster
             attackDamage *= damageMultiplier;
             moveSpeed *= speedMultiplier;
 
-            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+            Dictionary<string, object> healthData = new Dictionary<string, object>
+            {
+                { "current", currentHealth },
+                { "max", maxHealth },
+                { "monster", this }
+            };
+            EventManager.Dispatch(GameEventType.MonsterHealthChanged, healthData);
         }
 
         /// <summary>

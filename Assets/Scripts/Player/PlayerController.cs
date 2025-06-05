@@ -1,6 +1,7 @@
 using UnityEngine;
 using MagicBattle.Common;
 using MagicBattle.Skills;
+using System.Collections.Generic;
 
 namespace MagicBattle.Player
 {
@@ -109,12 +110,10 @@ namespace MagicBattle.Player
         /// </summary>
         private void SubscribeToEvents()
         {
-            if (playerStats != null)
-            {
-                playerStats.OnPlayerDeath.AddListener(OnPlayerDeath);
-                playerStats.OnHealthChanged.AddListener(OnHealthChanged);
-                playerStats.OnDamageTaken.AddListener(OnDamageTaken);
-            }
+            // EventManager를 통한 이벤트 구독
+            EventManager.Subscribe(GameEventType.PlayerDied, OnPlayerDeath);
+            EventManager.Subscribe(GameEventType.PlayerHealthChanged, OnPlayerHealthChanged);
+            EventManager.Subscribe(GameEventType.PlayerDamageTaken, OnDamageTaken);
         }
 
         /// <summary>
@@ -122,19 +121,17 @@ namespace MagicBattle.Player
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            if (playerStats != null)
-            {
-                playerStats.OnPlayerDeath.RemoveListener(OnPlayerDeath);
-                playerStats.OnHealthChanged.RemoveListener(OnHealthChanged);
-                playerStats.OnDamageTaken.RemoveListener(OnDamageTaken);
-            }
+            // EventManager 이벤트 구독 해제
+            EventManager.Unsubscribe(GameEventType.PlayerDied, OnPlayerDeath);
+            EventManager.Unsubscribe(GameEventType.PlayerHealthChanged, OnPlayerHealthChanged);
+            EventManager.Unsubscribe(GameEventType.PlayerDamageTaken, OnDamageTaken);
         }
 
         #region 이벤트 핸들러
         /// <summary>
         /// 플레이어 사망 시 호출되는 함수
         /// </summary>
-        private void OnPlayerDeath()
+        private void OnPlayerDeath(object args)
         {
             Debug.Log("플레이어가 사망했습니다. 게임오버 처리를 시작합니다.");
             
@@ -152,35 +149,44 @@ namespace MagicBattle.Player
         /// <summary>
         /// 체력 변화 시 호출되는 함수
         /// </summary>
-        /// <param name="currentHealth">현재 체력</param>
-        /// <param name="maxHealth">최대 체력</param>
-        private void OnHealthChanged(float currentHealth, float maxHealth)
+        /// <param name="args">체력 데이터 (current, max)</param>
+        private void OnPlayerHealthChanged(object args)
         {
-            // UI 업데이트나 시각적 효과
-            float healthPercent = maxHealth > 0 ? currentHealth / maxHealth : 0f;
-            
-            // 체력이 낮을 때 시각적 효과 (예: 빨간색 깜빡임)
-            if (healthPercent < 0.3f && spriteRenderer != null)
+            Dictionary<string, object> data = args as Dictionary<string, object>;
+            if (data != null)
             {
-                // 위험 상태 시각 효과
-                // spriteRenderer.color = Color.Lerp(Color.white, Color.red, 0.5f);
+                float currentHealth = (float)data["current"];
+                float maxHealth = (float)data["max"];
+                
+                // UI 업데이트나 시각적 효과
+                float healthPercent = maxHealth > 0 ? currentHealth / maxHealth : 0f;
+                
+                // 체력이 낮을 때 시각적 효과 (예: 빨간색 깜빡임)
+                if (healthPercent < 0.3f && spriteRenderer != null)
+                {
+                    // 위험 상태 시각 효과
+                    // spriteRenderer.color = Color.Lerp(Color.white, Color.red, 0.5f);
+                }
             }
         }
 
         /// <summary>
         /// 데미지를 받았을 때 호출되는 함수
         /// </summary>
-        /// <param name="damage">받은 데미지</param>
-        private void OnDamageTaken(float damage)
+        /// <param name="args">받은 데미지</param>
+        private void OnDamageTaken(object args)
         {
-            // 데미지 받은 시각적 효과
-            if (spriteRenderer != null)
+            if (args is float damage)
             {
-                // 플래시 효과나 흔들림 효과
-                // spriteRenderer.DOColor(Color.red, 0.1f).SetLoops(2, LoopType.Yoyo);
-            }
+                // 데미지 받은 시각적 효과
+                if (spriteRenderer != null)
+                {
+                    // 플래시 효과나 흔들림 효과
+                    // spriteRenderer.DOColor(Color.red, 0.1f).SetLoops(2, LoopType.Yoyo);
+                }
 
-            Debug.Log($"플레이어가 {damage} 데미지를 받았습니다!");
+                Debug.Log($"플레이어가 {damage} 데미지를 받았습니다!");
+            }
         }
         #endregion
 

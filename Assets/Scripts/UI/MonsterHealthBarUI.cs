@@ -1,7 +1,10 @@
 using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
+using MagicBattle.Common;
 using MagicBattle.Monster;
+using MagicBattle.Managers;
+using System.Collections.Generic;
 
 namespace MagicBattle.UI
 {
@@ -79,24 +82,21 @@ namespace MagicBattle.UI
         }
 
         /// <summary>
-        /// 몬스터 스탯 설정 및 이벤트 연결
+        /// 몬스터 스탯 설정
         /// </summary>
         /// <param name="stats">몬스터 스탯</param>
         public void SetMonsterStats(MonsterStats stats)
         {
-            // 기존 이벤트 구독 해제
-            if (monsterStats != null)
-            {
-                UnsubscribeFromEvents();
-            }
+            // 이전 이벤트 구독 해제
+            UnsubscribeFromEvents();
 
             monsterStats = stats;
-            monsterTransform = stats.transform;
-
-            if (monsterStats != null)
+            
+            if (stats != null)
             {
-                SubscribeToEvents();
+                monsterTransform = stats.transform;
                 InitializeHealthBar();
+                SubscribeToEvents();
             }
         }
 
@@ -105,12 +105,10 @@ namespace MagicBattle.UI
         /// </summary>
         private void SubscribeToEvents()
         {
-            if (monsterStats != null)
-            {
-                monsterStats.OnFirstHit.AddListener(ShowHealthBar);
-                monsterStats.OnHealthChanged.AddListener(UpdateHealthBar);
-                monsterStats.OnMonsterDeath.AddListener(OnMonsterDeath);
-            }
+            // EventManager를 통한 몬스터 이벤트 구독
+            EventManager.Subscribe(GameEventType.MonsterFirstHit, OnMonsterFirstHit);
+            EventManager.Subscribe(GameEventType.MonsterHealthChanged, OnMonsterHealthChanged);
+            EventManager.Subscribe(GameEventType.MonsterDied, OnMonsterDied);
         }
 
         /// <summary>
@@ -118,11 +116,48 @@ namespace MagicBattle.UI
         /// </summary>
         private void UnsubscribeFromEvents()
         {
-            if (monsterStats != null)
+            // EventManager를 통한 이벤트 구독 해제
+            EventManager.Unsubscribe(GameEventType.MonsterFirstHit, OnMonsterFirstHit);
+            EventManager.Unsubscribe(GameEventType.MonsterHealthChanged, OnMonsterHealthChanged);
+            EventManager.Unsubscribe(GameEventType.MonsterDied, OnMonsterDied);
+        }
+
+        /// <summary>
+        /// 몬스터 첫 피격 시 호출
+        /// </summary>
+        /// <param name="args">몬스터 인스턴스</param>
+        private void OnMonsterFirstHit(object args)
+        {
+            if (args is MonsterStats monster && monster == monsterStats)
             {
-                monsterStats.OnFirstHit.RemoveListener(ShowHealthBar);
-                monsterStats.OnHealthChanged.RemoveListener(UpdateHealthBar);
-                monsterStats.OnMonsterDeath.RemoveListener(OnMonsterDeath);
+                ShowHealthBar();
+            }
+        }
+
+        /// <summary>
+        /// 몬스터 체력 변경 시 호출
+        /// </summary>
+        /// <param name="args">체력 데이터</param>
+        private void OnMonsterHealthChanged(object args)
+        {
+            Dictionary<string, object> data = args as Dictionary<string, object>;
+            if (data != null && data["monster"] == monsterStats)
+            {
+                float currentHealth = (float)data["current"];
+                float maxHealth = (float)data["max"];
+                UpdateHealthBar(currentHealth, maxHealth);
+            }
+        }
+
+        /// <summary>
+        /// 몬스터 사망 시 호출
+        /// </summary>
+        /// <param name="args">사망한 몬스터</param>
+        private void OnMonsterDied(object args)
+        {
+            if (args is MonsterStats deadMonster && deadMonster == monsterStats)
+            {
+                HideHealthBar();
             }
         }
 
@@ -277,15 +312,6 @@ namespace MagicBattle.UI
         }
 
         /// <summary>
-        /// 몬스터 사망 시 호출
-        /// </summary>
-        /// <param name="deadMonster">사망한 몬스터</param>
-        private void OnMonsterDeath(MonsterStats deadMonster)
-        {
-            HideHealthBar();
-        }
-
-        /// <summary>
         /// 체력바 강제 숨김 (외부에서 호출용)
         /// </summary>
         public void ForceHide()
@@ -312,12 +338,12 @@ namespace MagicBattle.UI
 
         private void OnDestroy()
         {
-            // 이벤트 구독 해제
             UnsubscribeFromEvents();
 
-            // 트윈 정리
+            // 진행 중인 Tween 정리
             if (showTween != null && showTween.IsActive())
                 showTween.Kill();
+            
             if (hideTween != null && hideTween.IsActive())
                 hideTween.Kill();
         }

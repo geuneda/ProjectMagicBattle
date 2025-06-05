@@ -5,15 +5,8 @@ using MagicBattle.Player;
 
 namespace MagicBattle.Managers
 {
-    /// <summary>
-    /// 웨이브 상태를 나타내는 열거형
-    /// </summary>
-    public enum WaveState
-    {
-        Spawning,    // 몬스터 스폰 중 (20초)
-        Rest,        // 휴식 시간 (10초)
-        WaveCompleted // 웨이브 완료
-    }
+    // WaveState는 MagicBattle.Common.WaveState를 사용합니다
+    // Preparing, Spawning, Fighting, Completed
 
     /// <summary>
     /// 게임의 전체적인 상태와 플로우를 관리하는 매니저
@@ -47,17 +40,15 @@ namespace MagicBattle.Managers
         // 싱글톤 패턴
         public static GameManager Instance { get; private set; }
 
-        // 기존 이벤트
-        public UnityEvent<GameState> OnGameStateChanged;
-        public UnityEvent OnGameOver;
-        public UnityEvent<int> OnGoldChanged; // 골드 변화
-        public UnityEvent<int> OnMonsterKilled; // 몬스터 처치
-
-        // 웨이브 이벤트
-        public UnityEvent<int> OnWaveChanged; // 웨이브 변경 (웨이브 번호)
-        public UnityEvent<WaveState> OnWaveStateChanged; // 웨이브 상태 변경
-        public UnityEvent<float> OnWaveTimerUpdated; // 웨이브 타이머 업데이트 (남은 시간)
-        public UnityEvent OnMonsterShouldSpawn; // 몬스터 스폰 요청
+        // 이벤트는 EventManager를 통해 관리됩니다
+        // GameEventType.GameStateChanged 
+        // GameEventType.GameOver
+        // GameEventType.GoldChanged
+        // GameEventType.MonsterKilled
+        // GameEventType.WaveChanged
+        // GameEventType.WaveStateChanged
+        // GameEventType.WaveTimerUpdated
+        // GameEventType.MonsterShouldSpawn
 
         // 프로퍼티
         public GameState CurrentGameState => currentGameState;
@@ -105,6 +96,11 @@ namespace MagicBattle.Managers
             }
         }
 
+        private void OnDestroy()
+        {
+            EventManager.Unsubscribe(GameEventType.PlayerDied, GameOver);
+        }
+
         /// <summary>
         /// 게임 매니저 초기화
         /// </summary>
@@ -137,7 +133,7 @@ namespace MagicBattle.Managers
             // 플레이어 이벤트 구독
             if (playerController != null && playerController.Stats != null)
             {
-                playerController.Stats.OnPlayerDeath.AddListener(GameOver);
+                EventManager.Subscribe(GameEventType.PlayerDied, GameOver);
             }
 
             Debug.Log("게임이 시작되었습니다!");
@@ -168,7 +164,7 @@ namespace MagicBattle.Managers
                     break;
             }
 
-            OnGameStateChanged?.Invoke(newState);
+            EventManager.Dispatch(GameEventType.GameStateChanged, newState);
             Debug.Log($"게임 상태 변경: {previousState} → {newState}");
         }
 
@@ -206,10 +202,10 @@ namespace MagicBattle.Managers
         /// <summary>
         /// 게임오버 처리
         /// </summary>
-        public void GameOver()
+        public void GameOver(object args)
         {
             ChangeGameState(GameState.GameOver);
-            OnGameOver?.Invoke();
+            EventManager.Dispatch(GameEventType.GameOver);
             
             Debug.Log($"게임오버! 플레이 시간: {Utilities.FormatTime(gameTime)}, 처치한 몬스터: {totalMonstersKilled}");
         }
@@ -234,7 +230,7 @@ namespace MagicBattle.Managers
             ResetWaveSystem();
 
             // UI 업데이트
-            OnGoldChanged?.Invoke(currentGold);
+            EventManager.Dispatch(GameEventType.GoldChanged, currentGold);
 
             // 게임 시작
             StartGame();
@@ -251,15 +247,15 @@ namespace MagicBattle.Managers
             waveTimer -= Time.deltaTime;
             waveStateTimer += Time.deltaTime;
 
-            OnWaveTimerUpdated?.Invoke(waveTimer);
+            EventManager.Dispatch(GameEventType.WaveTimerUpdated, waveTimer);
 
             switch (currentWaveState)
             {
                 case WaveState.Spawning:
                     UpdateSpawningState();
                     break;
-                case WaveState.Rest:
-                    UpdateRestState();
+                case WaveState.Fighting:
+                    UpdateRestState(); // Fighting 상태에서는 별도 로직 없음
                     break;
             }
 
@@ -280,7 +276,7 @@ namespace MagicBattle.Managers
             {
                 waveStateTimer = 0f;
                 monstersSpawnedThisWave++;
-                OnMonsterShouldSpawn?.Invoke();
+                EventManager.Dispatch(GameEventType.MonsterShouldSpawn);
                 
                 Debug.Log($"웨이브 {currentWave}: 몬스터 스폰 ({monstersSpawnedThisWave}/{monstersPerWave})");
             }
@@ -288,7 +284,7 @@ namespace MagicBattle.Managers
             // 20초가 지나거나 모든 몬스터를 스폰했으면 휴식 상태로 전환
             if (waveStateTimer >= spawnDuration || monstersSpawnedThisWave >= monstersPerWave)
             {
-                ChangeWaveState(WaveState.Rest);
+                ChangeWaveState(WaveState.Fighting);
             }
         }
 
@@ -313,7 +309,7 @@ namespace MagicBattle.Managers
             currentWaveState = newState;
             waveStateTimer = 0f; // 상태 타이머 리셋
 
-            OnWaveStateChanged?.Invoke(newState);
+            EventManager.Dispatch(GameEventType.WaveStateChanged, newState);
             
             Debug.Log($"웨이브 {currentWave} 상태 변경: {previousState} → {newState}");
         }
@@ -328,7 +324,7 @@ namespace MagicBattle.Managers
             monstersSpawnedThisWave = 0;
             
             ChangeWaveState(WaveState.Spawning);
-            OnWaveChanged?.Invoke(currentWave);
+            EventManager.Dispatch(GameEventType.WaveChanged, currentWave);
             
             Debug.Log($"웨이브 {currentWave} 시작! (난이도 배수: {WaveDifficultyMultiplier:F1}x)");
         }
@@ -345,9 +341,9 @@ namespace MagicBattle.Managers
             currentWaveState = WaveState.Spawning;
             
             // 이벤트 발생
-            OnWaveChanged?.Invoke(currentWave);
-            OnWaveStateChanged?.Invoke(currentWaveState);
-            OnWaveTimerUpdated?.Invoke(waveTimer);
+            EventManager.Dispatch(GameEventType.WaveChanged, currentWave);
+            EventManager.Dispatch(GameEventType.WaveStateChanged, currentWaveState);
+            EventManager.Dispatch(GameEventType.WaveTimerUpdated, waveTimer);
         }
 
         /// <summary>
@@ -369,7 +365,7 @@ namespace MagicBattle.Managers
             if (amount <= 0) return;
 
             currentGold += amount;
-            OnGoldChanged?.Invoke(currentGold);
+            EventManager.Dispatch(GameEventType.GoldChanged, currentGold);
             
             Debug.Log($"골드 획득: +{amount} (총 {currentGold})");
         }
@@ -384,7 +380,7 @@ namespace MagicBattle.Managers
             if (amount <= 0 || currentGold < amount) return false;
 
             currentGold -= amount;
-            OnGoldChanged?.Invoke(currentGold);
+            EventManager.Dispatch(GameEventType.GoldChanged, currentGold);
             
             Debug.Log($"골드 소모: -{amount} (남은 골드: {currentGold})");
             return true;
@@ -409,7 +405,7 @@ namespace MagicBattle.Managers
         public void OnMonsterKilledByPlayer(int goldReward = 0)
         {
             totalMonstersKilled++;
-            OnMonsterKilled?.Invoke(totalMonstersKilled);
+            EventManager.Dispatch(GameEventType.MonsterKilled, totalMonstersKilled);
 
             if (goldReward > 0)
             {
@@ -453,7 +449,7 @@ namespace MagicBattle.Managers
         [ContextMenu("테스트: 게임오버")]
         private void TestGameOver()
         {
-            GameOver();
+            GameOver(null);
         }
 
         [ContextMenu("테스트: 게임 재시작")]
