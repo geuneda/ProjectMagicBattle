@@ -190,7 +190,7 @@ namespace MagicBattle.UI
             if (waveTimerText != null)
             {
                 int seconds = Mathf.CeilToInt(Mathf.Max(0f, waveTimer));
-                waveTimerText.text = $"시간: {seconds}";
+                waveTimerText.text = $"00:{seconds}";
                 
                 // 10초 이하일 때 빨간색으로 표시
                 if (seconds <= 10)

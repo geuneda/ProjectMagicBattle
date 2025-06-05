@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 using MagicBattle.Common;
 using MagicBattle.Skills;
 using MagicBattle.Player;
@@ -20,6 +21,7 @@ namespace MagicBattle.UI
         [SerializeField] private TextMeshProUGUI skillCountText;
         [SerializeField] private TextMeshProUGUI synthesisText;
         [SerializeField] private Image synthesisArrow;
+        [SerializeField] private Slider cooldownSlider; // 쿨다운 슬라이더
 
         [Header("상태별 색상")]
         [SerializeField] private Color disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.8f);
@@ -35,6 +37,13 @@ namespace MagicBattle.UI
         [SerializeField] private Color iceColor = new Color(0.3f, 0.8f, 1f, 1f);
         [SerializeField] private Color thunderColor = new Color(1f, 1f, 0.3f, 1f);
 
+        [Header("애니메이션 설정")]
+        [SerializeField] private float pulseScale = 1.2f; // 펄스 시 확대 비율
+        [SerializeField] private float pulseDuration = 0.3f; // 펄스 지속 시간
+
+        [Header("쿨다운 설정")]
+        [SerializeField] private Color cooldownSliderColor = new Color(1f, 1f, 1f, 0.8f); // 쿨다운 슬라이더 색상
+
         // 슬롯 데이터
         private SkillData skillData;
         private SkillShopUI parentShop;
@@ -44,9 +53,27 @@ namespace MagicBattle.UI
         private bool isSelected = false;
         private bool hasBeenClicked = false; // 한 번이라도 클릭되었는지 추적
 
+        // 애니메이션 관련
+        private Vector3 originalScale;
+        private Sequence pulseSequence;
+
+        // 쿨다운 관련
+        private Skills.SkillSystem skillSystem;
+
         private void Awake()
         {
             InitializeComponents();
+            // 원본 스케일 저장
+            originalScale = transform.localScale;
+        }
+
+        private void Update()
+        {
+            // 쿨다운 슬라이더 업데이트 (스킬을 보유하고 있을 때만)
+            if (currentSkillCount > 0)
+            {
+                UpdateCooldownSlider();
+            }
         }
 
         /// <summary>
@@ -111,6 +138,35 @@ namespace MagicBattle.UI
                 }
             }
 
+            // 쿨다운 슬라이더 찾기
+            if (cooldownSlider == null)
+            {
+                Transform sliderTransform = transform.Find("CooldownSlider");
+                if (sliderTransform != null)
+                {
+                    cooldownSlider = sliderTransform.GetComponent<Slider>();
+                }
+            }
+
+            // 쿨다운 슬라이더 초기 설정
+            if (cooldownSlider != null)
+            {
+                cooldownSlider.minValue = 0f;
+                cooldownSlider.maxValue = 1f;
+                cooldownSlider.value = 0f;
+                cooldownSlider.interactable = false; // 상호작용 비활성화
+                
+                // 슬라이더 색상 설정
+                if (cooldownSlider.fillRect != null)
+                {
+                    Image fillImage = cooldownSlider.fillRect.GetComponent<Image>();
+                    if (fillImage != null)
+                    {
+                        fillImage.color = cooldownSliderColor;
+                    }
+                }
+            }
+
             // 버튼 이벤트 설정
             if (slotButton != null)
             {
@@ -134,6 +190,12 @@ namespace MagicBattle.UI
                 playerSkillManager = FindFirstObjectByType<PlayerSkillManager>();
             }
 
+            // SkillSystem 참조 획득 (쿨다운 정보를 위해)
+            if (skillSystem == null && playerSkillManager != null)
+            {
+                skillSystem = playerSkillManager.GetSkillSystem();
+            }
+
             SetupBasicInfo();
         }
 
@@ -152,6 +214,9 @@ namespace MagicBattle.UI
 
             // 속성별 배경색 설정
             SetAttributeColor();
+
+            // 속성별 쿨다운 슬라이더 색상 설정
+            SetAttributeCooldownColor();
         }
 
         /// <summary>
@@ -172,6 +237,25 @@ namespace MagicBattle.UI
             // 배경에 속성 색상 적용 (약간 투명하게)
             attributeColor.a = 0.3f;
             backgroundImage.color = attributeColor;
+        }
+
+        /// <summary>
+        /// 속성별 쿨다운 슬라이더 색상 설정
+        /// </summary>
+        private void SetAttributeCooldownColor()
+        {
+            if (skillData == null) return;
+
+            Color attributeColor = skillData.Attribute switch
+            {
+                SkillAttribute.Fire => fireColor,
+                SkillAttribute.Ice => iceColor,
+                SkillAttribute.Thunder => thunderColor,
+                _ => cooldownSliderColor
+            };
+
+            // 쿨다운 슬라이더에 속성 색상 적용
+            SetCooldownSliderColor(attributeColor);
         }
 
         /// <summary>
@@ -207,6 +291,9 @@ namespace MagicBattle.UI
 
             // 합성 관련 UI 업데이트
             UpdateSynthesisUI();
+
+            // 쿨다운 슬라이더 초기 상태 설정
+            UpdateCooldownSliderVisibility(hasSkill);
         }
 
         /// <summary>
@@ -355,16 +442,17 @@ namespace MagicBattle.UI
         {
             if (skillData == null || playerSkillManager == null) return;
 
-            // PlayerSkillManager의 수동 합성 메서드 사용
-            bool success = playerSkillManager.SynthesizeSkill(skillData);
+            // PlayerSkillManager의 수동 합성 메서드 사용 (실제 합성된 스킬 받기)
+            bool success = playerSkillManager.SynthesizeSkill(skillData, out SkillData synthesizedSkill);
             
             if (success)
             {
-                Debug.Log($"합성 완료: {skillData.SkillName} (3개) → 상위 등급 (1개)");
+                Debug.Log($"합성 완료: {skillData.SkillName} (3개) → {synthesizedSkill?.SkillName} (1개)");
                 
-                // UI 업데이트 요청
-                if (parentShop != null)
+                // 실제 합성된 스킬에 펄스 효과 적용
+                if (parentShop != null && synthesizedSkill != null)
                 {
+                    parentShop.PlaySkillSynthesisEffect(synthesizedSkill);
                     parentShop.RefreshUI();
                 }
             }
@@ -403,7 +491,7 @@ namespace MagicBattle.UI
             if (selected)
             {
                 // 선택된 상태 - 밝은 테두리 효과
-                Color highlightColor = canSynthesize ? synthesisReadyColor : enabledColor;
+                Color highlightColor = enabledColor;
                 highlightColor.a = 0.8f;
                 backgroundImage.color = highlightColor;
             }
@@ -457,12 +545,140 @@ namespace MagicBattle.UI
             return Sprite.Create(texture, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f));
         }
 
+        /// <summary>
+        /// 스킬 획득 시 펄스 효과 재생
+        /// </summary>
+        public void PlayAcquireEffect()
+        {
+            PlayPulseEffect();
+        }
+
+        /// <summary>
+        /// 스킬 합성 시 펄스 효과 재생
+        /// </summary>
+        public void PlaySynthesisEffect()
+        {
+            PlayPulseEffect();
+        }
+
+        /// <summary>
+        /// 펄스 효과 재생 (커졌다가 원래대로)
+        /// </summary>
+        private void PlayPulseEffect()
+        {
+            // 기존 애니메이션이 있다면 중단
+            if (pulseSequence != null && pulseSequence.IsActive())
+            {
+                pulseSequence.Kill();
+            }
+
+            // 펄스 애니메이션 시퀀스 생성
+            pulseSequence = DOTween.Sequence();
+            
+            // 확대 → 축소 애니메이션
+            pulseSequence.Append(transform.DOScale(originalScale * pulseScale, pulseDuration * 0.5f)
+                .SetEase(Ease.OutQuad))
+                .Append(transform.DOScale(originalScale, pulseDuration * 0.5f)
+                .SetEase(Ease.InQuad));
+
+            // 애니메이션 완료 후 정리
+            pulseSequence.OnComplete(() =>
+            {
+                transform.localScale = originalScale;
+                pulseSequence = null;
+            });
+        }
+
+        /// <summary>
+        /// 스킬 데이터 확인 (외부에서 호출)
+        /// </summary>
+        /// <returns>이 슬롯의 스킬 데이터</returns>
+        public SkillData GetSkillData()
+        {
+            return skillData;
+        }
+
+        /// <summary>
+        /// 쿨다운 슬라이더 업데이트
+        /// </summary>
+        private void UpdateCooldownSlider()
+        {
+            if (cooldownSlider == null || skillData == null || skillSystem == null) return;
+
+            string skillID = skillData.GetSkillID();
+            float remainingCooldown = skillSystem.GetRemainingCooldown(skillID);
+            float totalCooldown = skillData.GetScaledCooldown();
+
+            if (totalCooldown <= 0f)
+            {
+                // 쿨다운이 없는 스킬이면 슬라이더 숨김
+                cooldownSlider.gameObject.SetActive(false);
+                return;
+            }
+
+            // 쿨다운이 있는 스킬이면 슬라이더 표시
+            cooldownSlider.gameObject.SetActive(true);
+
+            // 쿨다운 진행률 계산 (0: 쿨다운 완료, 1: 쿨다운 시작)
+            float cooldownProgress = remainingCooldown / totalCooldown;
+            cooldownSlider.value = cooldownProgress;
+
+            // 쿨다운이 완료되면 슬라이더 숨김
+            if (remainingCooldown <= 0f)
+            {
+                cooldownSlider.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// 쿨다운 슬라이더 색상 설정
+        /// </summary>
+        /// <param name="color">설정할 색상</param>
+        public void SetCooldownSliderColor(Color color)
+        {
+            cooldownSliderColor = color;
+            
+            if (cooldownSlider != null && cooldownSlider.fillRect != null)
+            {
+                Image fillImage = cooldownSlider.fillRect.GetComponent<Image>();
+                if (fillImage != null)
+                {
+                    fillImage.color = color;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 쿨다운 슬라이더 가시성 업데이트
+        /// </summary>
+        /// <param name="hasSkill">스킬 보유 여부</param>
+        private void UpdateCooldownSliderVisibility(bool hasSkill)
+        {
+            if (cooldownSlider == null) return;
+
+            // 스킬을 보유하지 않았으면 슬라이더 숨김
+            if (!hasSkill)
+            {
+                cooldownSlider.gameObject.SetActive(false);
+                return;
+            }
+
+            // 스킬을 보유했으면 쿨다운 상태에 따라 표시
+            // (실제 쿨다운 상태는 Update에서 지속적으로 업데이트됨)
+        }
+
         private void OnDestroy()
         {
             // 버튼 이벤트 정리
             if (slotButton != null)
             {
                 slotButton.onClick.RemoveAllListeners();
+            }
+
+            // DOTween 애니메이션 정리
+            if (pulseSequence != null && pulseSequence.IsActive())
+            {
+                pulseSequence.Kill();
             }
         }
     }

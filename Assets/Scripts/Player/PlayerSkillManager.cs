@@ -371,9 +371,12 @@ namespace MagicBattle.Player
         /// 수동 스킬 합성 (UI에서 사용)
         /// </summary>
         /// <param name="skillData">합성할 스킬</param>
+        /// <param name="synthesizedSkill">합성된 스킬 (out 매개변수)</param>
         /// <returns>합성 성공 여부</returns>
-        public bool SynthesizeSkill(SkillData skillData)
+        public bool SynthesizeSkill(SkillData skillData, out SkillData synthesizedSkill)
         {
+            synthesizedSkill = null;
+            
             if (skillData == null) return false;
 
             string skillID = skillData.GetSkillID();
@@ -423,11 +426,24 @@ namespace MagicBattle.Player
                 Debug.Log($"[PlayerSkillManager] 수동 스킬 합성 완료: {skillData.SkillName} ({skillData.Attribute} {skillData.Grade}) -> {upgradedSkill.SkillName} ({upgradedSkill.Attribute} {upgradedSkill.Grade})");
             }
             
+            // 합성된 스킬 반환
+            synthesizedSkill = upgradedSkill;
+            
             // 이벤트 발생
             OnSkillUpgraded?.Invoke(upgradedSkill);
             OnSkillAcquired?.Invoke(upgradedSkill, ownedSkills[upgradedSkillID]);
 
             return true;
+        }
+
+        /// <summary>
+        /// 수동 스킬 합성 (기존 호환성을 위한 오버로드)
+        /// </summary>
+        /// <param name="skillData">합성할 스킬</param>
+        /// <returns>합성 성공 여부</returns>
+        public bool SynthesizeSkill(SkillData skillData)
+        {
+            return SynthesizeSkill(skillData, out _);
         }
 
         /// <summary>
@@ -593,6 +609,15 @@ namespace MagicBattle.Player
         public bool IsAutoSkillActive()
         {
             return autoSkillCoroutine != null;
+        }
+
+        /// <summary>
+        /// SkillSystem 참조 반환 (UI에서 쿨다운 정보 접근용)
+        /// </summary>
+        /// <returns>SkillSystem 참조</returns>
+        public SkillSystem GetSkillSystem()
+        {
+            return skillSystem;
         }
 
         /// <summary>

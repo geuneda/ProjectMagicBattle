@@ -971,10 +971,6 @@ PrefabInstance:
       propertyPath: m_Name
       value: SkillShopUI
       objectReference: {fileID: 0}
-    - target: {fileID: 6312432066846861811, guid: 66d5dd08db1694710ba05ee0f37ec9c8, type: 3}
-      propertyPath: m_AnchoredPosition.x
-      value: 24
-      objectReference: {fileID: 0}
     - target: {fileID: 7016139167040390368, guid: 66d5dd08db1694710ba05ee0f37ec9c8, type: 3}
       propertyPath: m_Pivot.x
       value: 0.5

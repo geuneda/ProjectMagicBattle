@@ -239,11 +239,62 @@ namespace MagicBattle.UI
                 if (success)
                 {
                     Debug.Log($"스킬 획득: {drawnSkill.SkillName}");
-                    // TODO: 획득 이펙트 표시
+                    
+                    // 획득한 스킬 슬롯에 펄스 효과 적용
+                    PlaySkillAcquireEffect(drawnSkill);
                 }
             }
 
             UpdateUI();
+        }
+
+        /// <summary>
+        /// 스킬 획득 시 해당 슬롯에 펄스 효과 적용
+        /// </summary>
+        /// <param name="acquiredSkill">획득한 스킬</param>
+        private void PlaySkillAcquireEffect(SkillData acquiredSkill)
+        {
+            if (acquiredSkill == null) return;
+
+            // 해당 스킬의 슬롯 찾기
+            SkillSlotUI targetSlot = FindSkillSlot(acquiredSkill);
+            if (targetSlot != null)
+            {
+                targetSlot.PlayAcquireEffect();
+            }
+        }
+
+        /// <summary>
+        /// 스킬 합성 시 해당 슬롯에 펄스 효과 적용
+        /// </summary>
+        /// <param name="synthesizedSkill">합성된 상위 등급 스킬</param>
+        public void PlaySkillSynthesisEffect(SkillData synthesizedSkill)
+        {
+            if (synthesizedSkill == null) return;
+
+            // 해당 스킬의 슬롯 찾기
+            SkillSlotUI targetSlot = FindSkillSlot(synthesizedSkill);
+            if (targetSlot != null)
+            {
+                targetSlot.PlaySynthesisEffect();
+            }
+        }
+
+        /// <summary>
+        /// 특정 스킬의 슬롯 찾기
+        /// </summary>
+        /// <param name="skill">찾을 스킬</param>
+        /// <returns>해당 스킬의 슬롯 UI</returns>
+        private SkillSlotUI FindSkillSlot(SkillData skill)
+        {
+            foreach (SkillSlotUI slot in skillSlots)
+            {
+                if (slot.GetSkillData() == skill)
+                {
+                    return slot;
+                }
+            }
+            return null;
         }
         #endregion
 
