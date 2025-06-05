@@ -13,7 +13,6 @@ namespace MagicBattle.Player
         [Header("애니메이션 설정")]
         [SerializeField] private float attackAnimationDuration = 0.5f;
         [SerializeField] private float skillAnimationDuration = 0.8f;
-        [SerializeField] private float hitAnimationDuration = 0.3f;
 
         // 컴포넌트 참조 (캐싱)
         private Animator animator;

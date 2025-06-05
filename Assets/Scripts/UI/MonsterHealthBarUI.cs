@@ -141,7 +141,7 @@ namespace MagicBattle.UI
         private void OnMonsterHealthChanged(object args)
         {
             Dictionary<string, object> data = args as Dictionary<string, object>;
-            if (data != null && data["monster"] == monsterStats)
+            if (data != null && ReferenceEquals(data["monster"], monsterStats))
             {
                 float currentHealth = (float)data["current"];
                 float maxHealth = (float)data["max"];
