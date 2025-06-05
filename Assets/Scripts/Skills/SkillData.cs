@@ -85,6 +85,56 @@ namespace MagicBattle.Skills
         }
 
         /// <summary>
+        /// 스택 수를 고려한 최종 데미지 계산
+        /// </summary>
+        /// <param name="stackCount">현재 스택 수</param>
+        /// <returns>스택이 적용된 최종 데미지</returns>
+        public float GetStackedDamage(int stackCount)
+        {
+            float baseDamage = GetScaledDamage(); // 등급이 적용된 기본 데미지
+            
+            if (stackCount <= 1)
+                return baseDamage;
+
+            // 추가 스택 개수 (첫 번째 스택은 기본이므로 -1)
+            int additionalStacks = stackCount - 1;
+            float stackMultiplier = Mathf.Pow(Constants.SKILL_DAMAGE_MULTIPLIER_PER_STACK, additionalStacks);
+            
+            return baseDamage * stackMultiplier;
+        }
+
+        /// <summary>
+        /// 스택 수를 고려한 최종 쿨다운 계산
+        /// </summary>
+        /// <param name="stackCount">현재 스택 수</param>
+        /// <returns>스택이 적용된 최종 쿨다운</returns>
+        public float GetStackedCooldown(int stackCount)
+        {
+            float baseCooldown = GetScaledCooldown(); // 등급이 적용된 기본 쿨다운
+            
+            if (stackCount <= 1)
+                return baseCooldown;
+
+            // 추가 스택 개수 (첫 번째 스택은 기본이므로 -1)
+            int additionalStacks = stackCount - 1;
+            float reductionMultiplier = Mathf.Pow(Constants.SKILL_COOLDOWN_REDUCTION_PER_STACK, additionalStacks);
+            
+            return baseCooldown * reductionMultiplier;
+        }
+
+        /// <summary>
+        /// 스택 보너스 데미지 계산 (추가 데미지만)
+        /// </summary>
+        /// <param name="stackCount">현재 스택 수</param>
+        /// <returns>스택으로 인한 추가 데미지</returns>
+        public float GetStackBonusDamage(int stackCount)
+        {
+            float baseDamage = GetScaledDamage();
+            float totalDamage = GetStackedDamage(stackCount);
+            return totalDamage - baseDamage; // 추가 데미지만 반환
+        }
+
+        /// <summary>
         /// 스킬 정보를 포맷된 문자열로 반환
         /// </summary>
         /// <returns>스킬 정보 문자열</returns>

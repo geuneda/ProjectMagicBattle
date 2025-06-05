@@ -599,7 +599,7 @@ namespace MagicBattle.UI
         }
 
         /// <summary>
-        /// 쿨다운 슬라이더 업데이트
+        /// 쿨다운 슬라이더 업데이트 (스택 효과 고려)
         /// </summary>
         private void UpdateCooldownSlider()
         {
@@ -607,7 +607,9 @@ namespace MagicBattle.UI
 
             string skillID = skillData.GetSkillID();
             float remainingCooldown = skillSystem.GetRemainingCooldown(skillID);
-            float totalCooldown = skillData.GetScaledCooldown();
+            
+            // 스택을 고려한 총 쿨다운 시간 계산
+            float totalCooldown = skillData.GetStackedCooldown(currentSkillCount);
 
             if (totalCooldown <= 0f)
             {

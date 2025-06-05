@@ -30,6 +30,7 @@ namespace MagicBattle.Skills
 
         // 컴포넌트 참조
         private Transform playerTransform;
+        private Player.PlayerSkillManager playerSkillManager;
 
         // 이벤트
         public System.Action<SkillData> OnSkillCast;
@@ -51,6 +52,13 @@ namespace MagicBattle.Skills
         private void InitializeSystem()
         {
             playerTransform = transform;
+            
+            // PlayerSkillManager 참조 획득
+            playerSkillManager = GetComponent<Player.PlayerSkillManager>();
+            if (playerSkillManager == null)
+            {
+                playerSkillManager = FindFirstObjectByType<Player.PlayerSkillManager>();
+            }
 
             // FirePoint가 설정되지 않았다면 플레이어 위치 사용
             if (firePoint == null)
@@ -129,8 +137,16 @@ namespace MagicBattle.Skills
 
             string skillID = skillData.GetSkillID();
 
+            // 스택을 고려한 쿨다운 계산
+            int stackCount = 1; // 기본값
+            if (playerSkillManager != null)
+            {
+                stackCount = playerSkillManager.GetSkillStack(skillData);
+            }
+            float effectiveCooldown = skillData.GetStackedCooldown(stackCount);
+
             // 쿨타임 확인
-            if (!IsSkillReady(skillID, skillData.GetScaledCooldown()))
+            if (!IsSkillReady(skillID, effectiveCooldown))
                 return false;
 
             // 스킬별 투사체 풀 초기화 (필요한 경우)
@@ -140,7 +156,7 @@ namespace MagicBattle.Skills
             ExecuteSkill(skillData);
 
             // 쿨타임 시작
-            StartCooldown(skillID, skillData.GetScaledCooldown());
+            StartCooldown(skillID, effectiveCooldown);
 
             return true;
         }
@@ -273,8 +289,16 @@ namespace MagicBattle.Skills
                     projectile = projectileObj.AddComponent<Projectile>();
                 }
 
-                // 투사체 발사
-                projectile.Launch(firePoint.position, direction, skillData);
+                // 스택을 고려한 데미지 계산
+                int stackCount = 1; // 기본값
+                if (playerSkillManager != null)
+                {
+                    stackCount = playerSkillManager.GetSkillStack(skillData);
+                }
+                float effectiveDamage = skillData.GetStackedDamage(stackCount);
+
+                // 투사체 발사 (스택 데미지 적용)
+                projectile.LaunchWithCustomDamage(firePoint.position, direction, skillData, effectiveDamage);
 
                 // 투사체 제거 이벤트 구독
                 projectile.OnProjectileDestroyed += OnProjectileDestroyed;

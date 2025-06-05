@@ -110,6 +110,18 @@ namespace MagicBattle.Skills
         /// <param name="skillData">스킬 데이터</param>
         public void Launch(Vector3 startPosition, Vector2 targetDirection, SkillData skillData)
         {
+            LaunchWithCustomDamage(startPosition, targetDirection, skillData, skillData?.GetScaledDamage() ?? 10f);
+        }
+
+        /// <summary>
+        /// 투사체 초기화 및 발사 (커스텀 데미지 포함)
+        /// </summary>
+        /// <param name="startPosition">시작 위치</param>
+        /// <param name="targetDirection">이동 방향</param>
+        /// <param name="skillData">스킬 데이터</param>
+        /// <param name="customDamage">적용할 데미지</param>
+        public void LaunchWithCustomDamage(Vector3 startPosition, Vector2 targetDirection, SkillData skillData, float customDamage)
+        {
             // 위치 설정
             transform.position = startPosition;
 
@@ -118,7 +130,7 @@ namespace MagicBattle.Skills
             {
                 speed = skillData.ProjectileSpeed;
                 lifetime = skillData.ProjectileLifetime;
-                damage = skillData.GetScaledDamage();
+                damage = customDamage; // 커스텀 데미지 적용
                 isPiercing = skillData.IsPiercing;
                 maxTargets = skillData.MaxTargets;
                 skillAttribute = skillData.Attribute;

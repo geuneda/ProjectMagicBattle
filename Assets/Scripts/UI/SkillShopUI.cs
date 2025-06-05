@@ -31,6 +31,14 @@ namespace MagicBattle.UI
         [SerializeField] private GameObject skillInfoPanel;
         [SerializeField] private TextMeshProUGUI skillNameText;
         [SerializeField] private TextMeshProUGUI skillDescriptionText;
+        [SerializeField] private TextMeshProUGUI skillDamageText;
+        [SerializeField] private TextMeshProUGUI skillCooldownText;
+        [SerializeField] private TextMeshProUGUI skillProjectileSpeedText;
+        [SerializeField] private TextMeshProUGUI skillRangeText;
+        [SerializeField] private TextMeshProUGUI skillProjectileCountText;
+        [SerializeField] private TextMeshProUGUI skillAttributeGradeText;
+        [SerializeField] private TextMeshProUGUI skillOwnedCountText;
+        [SerializeField] private TextMeshProUGUI skillSpecialEffectsText;
         [SerializeField] private Button closeInfoButton;
 
         // 컴포넌트 참조
@@ -324,6 +332,100 @@ namespace MagicBattle.UI
 
             if (skillDescriptionText != null)
                 skillDescriptionText.text = skill.Description;
+
+            // 스택을 고려한 데미지 표시
+            if (skillDamageText != null && playerSkillManager != null)
+            {
+                int stackCount = playerSkillManager.GetSkillStack(skill);
+                float baseDamage = skill.GetScaledDamage();
+                float bonusDamage = skill.GetStackBonusDamage(stackCount);
+                
+                if (stackCount > 1 && bonusDamage > 0)
+                {
+                    skillDamageText.text = $"데미지: {baseDamage:F1} + {bonusDamage:F1} = {skill.GetStackedDamage(stackCount):F1}";
+                }
+                else
+                {
+                    skillDamageText.text = $"데미지: {baseDamage:F1}";
+                }
+            }
+
+            // 스택을 고려한 쿨다운 표시
+            if (skillCooldownText != null && playerSkillManager != null)
+            {
+                int stackCount = playerSkillManager.GetSkillStack(skill);
+                float finalCooldown = skill.GetStackedCooldown(stackCount);
+                
+                if (stackCount > 1)
+                {
+                    float baseCooldown = skill.GetScaledCooldown();
+                    float reduction = baseCooldown - finalCooldown;
+                    skillCooldownText.text = $"쿨다운: {finalCooldown:F1}초 ( -{reduction:F1}초)";
+                }
+                else
+                {
+                    skillCooldownText.text = $"쿨다운: {finalCooldown:F1}초";
+                }
+            }
+
+            // 투사체 속도 표시
+            if (skillProjectileSpeedText != null)
+                skillProjectileSpeedText.text = $"투사체 속도: {skill.ProjectileSpeed:F1}";
+
+            // 사거리 표시
+            if (skillRangeText != null)
+                skillRangeText.text = $"사거리: {skill.Range:F1}";
+
+            // 투사체 개수 표시
+            if (skillProjectileCountText != null)
+                skillProjectileCountText.text = $"투사체 개수: {skill.ProjectileCount}개";
+
+            // 속성과 등급 표시
+            if (skillAttributeGradeText != null)
+                skillAttributeGradeText.text = $"{GetAttributeDisplayName(skill.Attribute)} {GetGradeDisplayName(skill.Grade)}";
+
+            // 보유 개수 표시
+            if (skillOwnedCountText != null && playerSkillManager != null)
+            {
+                int ownedCount = playerSkillManager.GetSkillStack(skill);
+                skillOwnedCountText.text = $"보유 개수: {ownedCount}개";
+                
+                // 합성 가능 여부 표시
+                if (ownedCount >= Constants.SKILL_UPGRADE_REQUIRED_COUNT && skill.Grade < SkillGrade.Grade3)
+                {
+                    skillOwnedCountText.text += " (합성 가능)";
+                    skillOwnedCountText.color = Color.green;
+                }
+                                 else
+                 {
+                     skillOwnedCountText.color = Color.white;
+                 }
+             }
+
+            // 특수 효과 표시
+            if (skillSpecialEffectsText != null)
+            {
+                string specialEffects = "";
+                
+                if (skill.IsPiercing)
+                    specialEffects += "관통 ";
+                
+                if (skill.MaxTargets > 1)
+                    specialEffects += $"다중타격({skill.MaxTargets}체) ";
+                
+                if (skill.ProjectileCount > 1)
+                    specialEffects += $"다중발사({skill.ProjectileCount}발) ";
+
+                if (!string.IsNullOrEmpty(specialEffects))
+                {
+                    skillSpecialEffectsText.text = $"특수효과: {specialEffects.Trim()}";
+                    skillSpecialEffectsText.gameObject.SetActive(true);
+                }
+                else
+                {
+                    skillSpecialEffectsText.gameObject.SetActive(false);
+                }
+            }
         }
 
         /// <summary>
@@ -364,6 +466,37 @@ namespace MagicBattle.UI
             UpdateUI();
         }
         
+        /// <summary>
+        /// 속성을 한국어로 변환
+        /// </summary>
+        /// <param name="attribute">스킬 속성</param>
+        /// <returns>한국어 속성명</returns>
+        private string GetAttributeDisplayName(SkillAttribute attribute)
+        {
+            return attribute switch
+            {
+                SkillAttribute.Fire => "화염",
+                SkillAttribute.Ice => "빙결",
+                SkillAttribute.Thunder => "번개",
+                _ => attribute.ToString()
+            };
+        }
+
+        /// <summary>
+        /// 등급을 한국어로 변환
+        /// </summary>
+        /// <param name="grade">스킬 등급</param>
+        /// <returns>한국어 등급명</returns>
+        private string GetGradeDisplayName(SkillGrade grade)
+        {
+            return grade switch
+            {
+                SkillGrade.Grade1 => "1등급",
+                SkillGrade.Grade2 => "2등급",
+                SkillGrade.Grade3 => "3등급",
+                _ => grade.ToString()
+            };
+        }
         #endregion
 
         private void OnDestroy()
