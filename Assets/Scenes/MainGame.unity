@@ -159,30 +159,6 @@ MonoBehaviour:
   playerController: {fileID: 965108442}
   gameTime: 0
   totalMonstersKilled: 0
-  OnGameStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  OnGameOver:
-    m_PersistentCalls:
-      m_Calls: []
-  OnGoldChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  OnMonsterKilled:
-    m_PersistentCalls:
-      m_Calls: []
-  OnWaveChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  OnWaveStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  OnWaveTimerUpdated:
-    m_PersistentCalls:
-      m_Calls: []
-  OnMonsterShouldSpawn:
-    m_PersistentCalls:
-      m_Calls: []
   formattedGameTime: 
   formattedGold: 
 --- !u!4 &394390922
