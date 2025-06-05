@@ -112,10 +112,54 @@ namespace MagicBattle.Managers
                 playerController = FindFirstObjectByType<PlayerController>();
             }
 
+            // ServiceLocator에 핵심 서비스들 등록
+            RegisterCoreServices();
+
             // 기본 게임 속도 설정
             Time.timeScale = gameSpeed;
 
             Debug.Log("GameManager가 초기화되었습니다.");
+        }
+
+        /// <summary>
+        /// 핵심 서비스들을 ServiceLocator에 등록
+        /// </summary>
+        private void RegisterCoreServices()
+        {
+            var serviceLocator = ServiceLocator.Instance;
+
+            // 게임매니저 자신을 등록
+            serviceLocator.RegisterService<GameManager>(this);
+
+            // 플레이어 관련 서비스 등록
+            if (playerController != null)
+            {
+                serviceLocator.RegisterService<PlayerController>(playerController);
+                
+                // 플레이어의 하위 컴포넌트들도 등록
+                var playerStats = playerController.GetComponent<PlayerStats>();
+                if (playerStats != null)
+                    serviceLocator.RegisterService<PlayerStats>(playerStats);
+
+                var playerAttack = playerController.GetComponent<PlayerAttack>();
+                if (playerAttack != null)
+                    serviceLocator.RegisterService<PlayerAttack>(playerAttack);
+
+                var playerSkillManager = playerController.GetComponent<PlayerSkillManager>();
+                if (playerSkillManager != null)
+                    serviceLocator.RegisterService<PlayerSkillManager>(playerSkillManager);
+            }
+
+            // 기타 매니저들 등록
+            var poolManager = FindFirstObjectByType<PoolManager>();
+            if (poolManager != null)
+                serviceLocator.RegisterService<PoolManager>(poolManager);
+
+            var skillSystem = FindFirstObjectByType<Skills.SkillSystem>();
+            if (skillSystem != null)
+                serviceLocator.RegisterService<Skills.SkillSystem>(skillSystem);
+
+            Debug.Log("핵심 서비스들이 ServiceLocator에 등록되었습니다.");
         }
 
         /// <summary>

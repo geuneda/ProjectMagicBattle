@@ -340,14 +340,22 @@ namespace MagicBattle.Skills
         }
 
         /// <summary>
-        /// 가장 가까운 몬스터 방향 찾기
+        /// 가장 가까운 몬스터 방향 찾기 (Physics2D 기반 최적화)
         /// </summary>
         /// <returns>몬스터 방향 (없으면 아래쪽)</returns>
         private Vector2 GetNearestMonsterDirection()
         {
-            GameObject[] monsters = GameObject.FindGameObjectsWithTag("Monster");
+            // 지금은 아래로만 공격하면 됨
+            return Vector2.down;
+
+            // Physics2D를 사용하여 범위 내 몬스터 탐지 (성능 최적화)
+            Collider2D[] monstersInRange = Physics2D.OverlapCircleAll(
+                playerTransform.position, 
+                targetSearchRange, 
+                1 << Constants.MONSTER_LAYER // 몬스터 레이어만 탐지
+            );
             
-            if (monsters.Length == 0)
+            if (monstersInRange.Length == 0)
             {
                 // 몬스터가 없으면 기본적으로 아래쪽으로 발사
                 return Vector2.down;
@@ -356,16 +364,20 @@ namespace MagicBattle.Skills
             GameObject nearestMonster = null;
             float nearestDistance = float.MaxValue;
 
-            foreach (GameObject monster in monsters)
+            foreach (Collider2D monsterCollider in monstersInRange)
             {
-                if (monster.activeInHierarchy)
+                // 활성화된 몬스터만 고려
+                if (!monsterCollider.gameObject.activeInHierarchy) continue;
+                
+                // 몬스터가 살아있는지 확인
+                var monsterStats = monsterCollider.GetComponent<MagicBattle.Monster.MonsterStats>();
+                if (monsterStats == null || !monsterStats.IsAlive) continue;
+
+                float distance = Vector2.Distance(playerTransform.position, monsterCollider.transform.position);
+                if (distance < nearestDistance)
                 {
-                    float distance = Vector2.Distance(playerTransform.position, monster.transform.position);
-                    if (distance < nearestDistance && distance <= targetSearchRange)
-                    {
-                        nearestDistance = distance;
-                        nearestMonster = monster;
-                    }
+                    nearestDistance = distance;
+                    nearestMonster = monsterCollider.gameObject;
                 }
             }
 
@@ -375,8 +387,7 @@ namespace MagicBattle.Skills
                 return direction;
             }
 
-            // 범위 내에 몬스터가 없으면 아래쪽으로 발사
-            return Vector2.down;
+
         }
 
         /// <summary>

@@ -43,7 +43,6 @@ namespace MagicBattle.UI
             if (Instance == null)
             {
                 Instance = this;
-                DontDestroyOnLoad(gameObject);
                 InitializeManager();
             }
             else

@@ -101,51 +101,31 @@ namespace MagicBattle.UI
                 }
             }
 
-            // 자식 오브젝트들에서 컴포넌트 찾기
+            // 자식 오브젝트들에서 컴포넌트 찾기 (안전한 참조 획득)
             if (skillIcon == null)
             {
-                Transform iconTransform = transform.Find("SkillIcon");
-                if (iconTransform != null)
-                {
-                    skillIcon = iconTransform.GetComponent<Image>();
-                }
+                skillIcon = GetRequiredComponentInChildren<Image>("SkillIcon");
             }
 
             if (skillCountText == null)
             {
-                Transform countTransform = transform.Find("SkillCount");
-                if (countTransform != null)
-                {
-                    skillCountText = countTransform.GetComponent<TextMeshProUGUI>();
-                }
+                skillCountText = GetRequiredComponentInChildren<TextMeshProUGUI>("SkillCount");
             }
 
             if (synthesisText == null)
             {
-                Transform synthesisTextTransform = transform.Find("SynthesisText");
-                if (synthesisTextTransform != null)
-                {
-                    synthesisText = synthesisTextTransform.GetComponent<TextMeshProUGUI>();
-                }
+                synthesisText = GetRequiredComponentInChildren<TextMeshProUGUI>("SynthesisText");
             }
 
             if (synthesisArrow == null)
             {
-                Transform arrowTransform = transform.Find("SynthesisArrow");
-                if (arrowTransform != null)
-                {
-                    synthesisArrow = arrowTransform.GetComponent<Image>();
-                }
+                synthesisArrow = GetRequiredComponentInChildren<Image>("SynthesisArrow");
             }
 
             // 쿨다운 슬라이더 찾기
             if (cooldownSlider == null)
             {
-                Transform sliderTransform = transform.Find("CooldownSlider");
-                if (sliderTransform != null)
-                {
-                    cooldownSlider = sliderTransform.GetComponent<Slider>();
-                }
+                cooldownSlider = GetRequiredComponentInChildren<Slider>("CooldownSlider");
             }
 
             // 쿨다운 슬라이더 초기 설정
@@ -184,10 +164,19 @@ namespace MagicBattle.UI
             skillData = skill;
             parentShop = shop;
 
-            // PlayerSkillManager 참조 획득
             if (playerSkillManager == null)
             {
-                playerSkillManager = FindFirstObjectByType<PlayerSkillManager>();
+                if (ServiceLocator.Instance.HasService<PlayerSkillManager>())
+                {
+                    playerSkillManager = ServiceLocator.Instance.GetService<PlayerSkillManager>();
+                }
+                
+                // 게임매니저를 통해 찾지 못한 경우에만 FindFirstObjectByType 사용
+                if (playerSkillManager == null)
+                {
+                    playerSkillManager = FindFirstObjectByType<PlayerSkillManager>();
+                    Debug.LogWarning("PlayerSkillManager를 GameManager를 통해 찾지 못해 FindFirstObjectByType을 사용했습니다.");
+                }
             }
 
             // SkillSystem 참조 획득 (쿨다운 정보를 위해)
@@ -667,6 +656,47 @@ namespace MagicBattle.UI
 
             // 스킬을 보유했으면 쿨다운 상태에 따라 표시
             // (실제 쿨다운 상태는 Update에서 지속적으로 업데이트됨)
+        }
+
+        /// <summary>
+        /// 자식 오브젝트에서 필요한 컴포넌트를 안전하게 찾는 메서드
+        /// </summary>
+        /// <typeparam name="T">찾을 컴포넌트 타입</typeparam>
+        /// <param name="childName">자식 오브젝트 이름</param>
+        /// <returns>찾은 컴포넌트 (없으면 null)</returns>
+        private T GetRequiredComponentInChildren<T>(string childName) where T : Component
+        {
+            // 우선 직접 자식에서 찾기
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                Transform child = transform.GetChild(i);
+                if (child.name == childName)
+                {
+                    T component = child.GetComponent<T>();
+                    if (component != null)
+                    {
+                        return component;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"{gameObject.name}의 자식 '{childName}'에서 {typeof(T).Name} 컴포넌트를 찾을 수 없습니다.");
+                        return null;
+                    }
+                }
+            }
+
+            // 직접 자식에서 찾지 못했다면 GetComponentInChildren으로 재귀 검색
+            T[] components = GetComponentsInChildren<T>(true);
+            foreach (T component in components)
+            {
+                if (component.gameObject.name == childName)
+                {
+                    return component;
+                }
+            }
+
+            Debug.LogWarning($"{gameObject.name}에서 '{childName}' 이름의 {typeof(T).Name} 컴포넌트를 찾을 수 없습니다. Inspector에서 직접 할당해주세요.");
+            return null;
         }
 
         private void OnDestroy()
