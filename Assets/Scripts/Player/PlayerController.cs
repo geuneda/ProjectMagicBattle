@@ -14,6 +14,7 @@ namespace MagicBattle.Player
         [SerializeField] private PlayerStats playerStats;
         [SerializeField] private PlayerAttack playerAttack;
         [SerializeField] private PlayerSkillManager playerSkillManager;
+        [SerializeField] private PlayerAnimationController playerAnimationController;
 
         [Header("시각적 요소")]
         [SerializeField] private SpriteRenderer spriteRenderer;
@@ -27,6 +28,7 @@ namespace MagicBattle.Player
         public PlayerStats Stats => playerStats;
         public PlayerAttack Attack => playerAttack;
         public PlayerSkillManager SkillManager => playerSkillManager;
+        public PlayerAnimationController AnimationController => playerAnimationController;
         public bool IsAlive => playerStats != null && playerStats.IsAlive;
 
         private void Awake()
@@ -62,6 +64,7 @@ namespace MagicBattle.Player
             playerStats = Utilities.GetOrAddComponent<PlayerStats>(gameObject);
             playerAttack = Utilities.GetOrAddComponent<PlayerAttack>(gameObject);
             playerSkillManager = Utilities.GetOrAddComponent<PlayerSkillManager>(gameObject);
+            playerAnimationController = Utilities.GetOrAddComponent<PlayerAnimationController>(gameObject);
             
             // 시각적 컴포넌트들
             spriteRenderer = GetComponent<SpriteRenderer>();
@@ -271,6 +274,12 @@ namespace MagicBattle.Player
             if (playerStats != null)
             {
                 playerStats.ResetStats();
+            }
+
+            // 애니메이션 상태 리셋
+            if (playerAnimationController != null)
+            {
+                playerAnimationController.ResetAnimationState();
             }
 
             // 시각적 요소 리셋

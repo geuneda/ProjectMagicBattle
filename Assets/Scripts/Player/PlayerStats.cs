@@ -22,6 +22,7 @@ namespace MagicBattle.Player
         public UnityEvent<float, float> OnHealthChanged; // 현재체력, 최대체력
         public UnityEvent OnPlayerDeath;
         public UnityEvent<float> OnDamageTaken; // 받은 데미지
+        public UnityEvent<PlayerState> OnStateChanged; // 상태 변경
 
         // 프로퍼티
         public float MaxHealth => maxHealth;
@@ -118,6 +119,9 @@ namespace MagicBattle.Player
 
             PlayerState previousState = currentState;
             currentState = newState;
+
+            // 상태 변경 이벤트 발생
+            OnStateChanged?.Invoke(newState);
 
             // 상태 변경 로그 (디버깅용)
             Debug.Log($"플레이어 상태 변경: {previousState} → {currentState}");

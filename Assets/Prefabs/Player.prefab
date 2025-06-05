@@ -17,6 +17,8 @@ GameObject:
   - component: {fileID: 6898652356941965042}
   - component: {fileID: 5350838830869732022}
   - component: {fileID: 7959286620359362484}
+  - component: {fileID: -3711363335151811614}
+  - component: {fileID: 152766182144378968}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -54,6 +56,7 @@ MonoBehaviour:
   playerStats: {fileID: 374453551964624792}
   playerAttack: {fileID: 5284536399641614915}
   playerSkillManager: {fileID: 5350838830869732022}
+  playerAnimationController: {fileID: 0}
   spriteRenderer: {fileID: 8297864880154486986}
   animator: {fileID: 0}
   fixedPosition: {x: 0, y: 3, z: 0}
@@ -137,6 +140,9 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   OnDamageTaken:
+    m_PersistentCalls:
+      m_Calls: []
+  OnStateChanged:
     m_PersistentCalls:
       m_Calls: []
 --- !u!114 &5284536399641614915
@@ -255,3 +261,40 @@ MonoBehaviour:
   targetSearchRange: 10
   defaultProjectilePrefab: {fileID: 5953545495418054763, guid: 5ccd9360880b44a4389b0b33d69aa045, type: 3}
   initialPoolSize: 20
+--- !u!114 &-3711363335151811614
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3402347549121396353}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17bd3bf26454840eca910f4779da12f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  attackAnimationDuration: 0.5
+  skillAnimationDuration: 0.8
+  hitAnimationDuration: 0.3
+--- !u!95 &152766182144378968
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3402347549121396353}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: ddb574b54bb0649b091da6c1c1ed5e1c, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

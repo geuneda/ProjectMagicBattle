@@ -39,7 +39,8 @@ namespace MagicBattle.Common
     {
         Idle,     // 대기
         Attacking, // 공격 중
-        Dead      // 사망
+        Dead,      // 사망
+        UsingSkill // 스킬 사용 중
     }
 
     /// <summary>

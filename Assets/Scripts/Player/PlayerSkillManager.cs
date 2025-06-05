@@ -578,6 +578,16 @@ namespace MagicBattle.Player
         /// <param name="skillData">시전된 스킬</param>
         private void OnSkillCastHandler(SkillData skillData)
         {
+            // 플레이어 상태를 스킬 사용 상태로 변경 (애니메이션 트리거용)
+            PlayerStats playerStats = GetComponent<PlayerStats>();
+            if (playerStats != null)
+            {
+                playerStats.ChangeState(PlayerState.UsingSkill);
+            }
+
+            // 스킬 사용 이벤트 발생
+            OnSkillUsed?.Invoke(skillData);
+
             if (enableDebugLogs)
             {
                 Debug.Log($"[PlayerSkillManager] 스킬 시전됨: {skillData.SkillName}");
