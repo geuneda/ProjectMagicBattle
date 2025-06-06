@@ -68,7 +68,7 @@ namespace MagicBattle.UI
         private void InitializeComponents()
         {
             // PlayerSkillManager 찾기
-            playerSkillManager = FindFirstObjectByType<PlayerSkillManager>();
+            playerSkillManager = ServiceLocator.Instance.GetService<PlayerSkillManager>();
             if (playerSkillManager == null)
             {
                 Debug.LogError("PlayerSkillManager를 찾을 수 없습니다!");

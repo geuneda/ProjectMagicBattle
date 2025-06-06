@@ -19,7 +19,6 @@ namespace MagicBattle.Player
 
         [Header("시각적 요소")]
         [SerializeField] private SpriteRenderer spriteRenderer;
-        [SerializeField] private Animator animator; // 추후 애니메이션 추가 시 사용
 
         [Header("위치 설정")]
         [SerializeField] private Vector3 fixedPosition = new Vector3(0f, 3f, 0f);
@@ -69,7 +68,6 @@ namespace MagicBattle.Player
             
             // 시각적 컴포넌트들
             spriteRenderer = GetComponent<SpriteRenderer>();
-            animator = GetComponent<Animator>();
 
             // SpriteRenderer가 없다면 추가
             if (spriteRenderer == null)
