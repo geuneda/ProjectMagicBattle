@@ -1,0 +1,967 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# ProjectMagicBattle - 2인 PvP 디펜스 게임 개발 가이드
+
+## 1. 프로젝트 구조 현황 분석
+
+### 1.1 기존 아키텍처
+**현재 상태**: 싱글플레이어 디펜스 게임
+- **매니저 시스템**: GameManager, PoolManager, EventManager
+- **플레이어 시스템**: PlayerController, PlayerStats, PlayerAttack, PlayerSkillManager, PlayerAnimationController
+- **몬스터 시스템**: MonsterController, MonsterStats, MonsterSpawner, MonsterAI
+- **공통 시스템**: Enums, Constants, ServiceLocator, Utilities
+- **네트워크**: Photon Fusion 2 설치 완료
+
+### 1.2 아키텍처 문제점
+1. **GameManager 비대화**: 모든 기능이 하나의 클래스에 집중 (안티패턴)
+2. **Find 의존성**: ServiceLocator에서 FindFirstObjectByType 사용
+3. **강결합**: 매니저 간 직접 참조 관계
+4. **단일 플레이어 전용**: 멀티플레이어 확장성 부족
+
+## 2. 네트워크 아키텍처 설계
+
+### 2.1 Photon Fusion 2 - Shared Mode 설계
+
+#### NetworkManager 시스템
+```csharp
+/// <summary>
+/// Fusion 네트워크 연결 및 세션 관리
+/// </summary>
+public class NetworkManager : NetworkBehaviour, INetworkBehaviour
+{
+    public static NetworkManager Instance { get; private set; }
+    
+    [Networked] public NetworkString<32> RoomName { get; set; }
+    [Networked] public int ConnectedPlayerCount { get; set; }
+    [Networked] public NetworkButtons NetworkButtons { get; set; }
+    
+    // Shared Mode용 세션 설정
+    public async UniTask<bool> StartSharedModeSessionAsync(string roomName)
+    {
+        var startGameArgs = new StartGameArgs()
+        {
+            GameMode = GameMode.Shared,
+            SessionName = roomName,
+            PlayerCount = 2, // 2인 게임 고정
+            SceneManager = GetComponent<NetworkSceneManager>()
+        };
+        
+        return await Runner.StartGame(startGameArgs).AsUniTask();
+    }
+}
+```
+
+#### NetworkPlayer 컴포넌트
+```csharp
+/// <summary>
+/// 네트워크 플레이어 상태 동기화 (이벤트 기반)
+/// </summary>
+public class NetworkPlayer : NetworkBehaviour
+{
+    [Networked] public float Health { get; set; }
+    [Networked] public int Score { get; set; }
+    [Networked] public int CurrentWave { get; set; }
+    [Networked] public PlayerState State { get; set; }
+    [Networked, Capacity(10)] public NetworkArray<int> OwnedSkills { get; }
+    
+    // 로컬 PlayerController 참조
+    [SerializeField] private PlayerController localPlayerController;
+    
+    // 스킬 사용 이벤트 동기화
+    [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
+    public void UseSkillRPC(string skillId, Vector3 startPos, Vector3 direction, int eventId)
+    {
+        NetworkSkillSystem.Instance.ProcessSkillUse(skillId, startPos, direction, eventId);
+    }
+    
+    // 플레이어 상태 업데이트 이벤트
+    [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
+    public void UpdatePlayerStateRPC(float health, int score, PlayerState state)
+    {
+        Health = health;
+        Score = score;
+        State = state;
+        
+        // 로컬 이벤트 발생
+        GameEvents.TriggerPlayerStateSync(Object.InputAuthority, health, score, state);
+    }
+}
+```
+
+### 2.2 이벤트 기반 투사체 시스템
+
+#### NetworkSkillSystem
+```csharp
+/// <summary>
+/// 스킬 및 투사체 네트워크 동기화 (RPC 기반)
+/// </summary>
+public class NetworkSkillSystem : NetworkBehaviour
+{
+    public static NetworkSkillSystem Instance { get; private set; }
+    
+    private Dictionary<int, bool> processedEvents = new Dictionary<int, bool>();
+    private int nextEventId = 0;
+    
+    /// <summary>
+    /// 투사체 발사 이벤트 동기화
+    /// </summary>
+    [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
+    public void FireProjectileRPC(string skillId, Vector3 startPos, Vector3 direction, 
+                                  float damage, int playerId, int eventId)
+    {
+        // 중복 이벤트 방지
+        if (processedEvents.ContainsKey(eventId)) return;
+        processedEvents[eventId] = true;
+        
+        // 로컬 투사체 생성 (시각적)
+        CreateLocalProjectile(skillId, startPos, direction, damage, playerId, eventId);
+    }
+    
+    /// <summary>
+    /// 몬스터 피격 이벤트 동기화
+    /// </summary>
+    [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
+    public void MonsterHitRPC(int monsterId, float damage, Vector3 hitPos, 
+                              int playerId, int eventId)
+    {
+        if (processedEvents.ContainsKey(eventId)) return;
+        processedEvents[eventId] = true;
+        
+        // 몬스터 데미지 처리
+        ProcessMonsterDamage(monsterId, damage, hitPos, playerId);
+    }
+    
+    private void CreateLocalProjectile(string skillId, Vector3 startPos, Vector3 direction, 
+                                     float damage, int playerId, int eventId)
+    {
+        // 기존 로컬 투사체 시스템 활용
+        var projectile = PoolManager.Instance.SpawnFromPool("Projectile", startPos);
+        var projectileComponent = projectile.GetComponent<Projectile>();
+        
+        projectileComponent.SetNetworkData(eventId, playerId);
+        projectileComponent.Initialize(direction, damage, skillId);
+    }
+}
+```
+
+### 2.3 웨이브 시스템 네트워크 동기화
+
+#### NetworkWaveManager
+```csharp
+/// <summary>
+/// 웨이브 시스템 네트워크 동기화 (Shared Mode)
+/// </summary>
+public class NetworkWaveManager : NetworkBehaviour
+{
+    [Networked] public int CurrentWave { get; set; } = 1;
+    [Networked] public WaveState CurrentWaveState { get; set; } = WaveState.Preparing;
+    [Networked] public float WaveTimer { get; set; } = 30f;
+    [Networked] public int MonstersSpawnedThisWave { get; set; } = 0;
+    
+    // Master Client가 웨이브 진행 관리
+    public override void FixedUpdateNetwork()
+    {
+        if (!Object.HasStateAuthority) return;
+        
+        // 웨이브 타이머 업데이트
+        WaveTimer -= Runner.DeltaTime;
+        
+        // 웨이브 상태 업데이트
+        UpdateWaveState();
+    }
+    
+    /// <summary>
+    /// 몬스터 스폰 이벤트 (Authority만 실행)
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    public void SpawnMonsterRPC(Vector3 spawnPos, string monsterType, int monsterId)
+    {
+        // 모든 클라이언트에서 동일한 몬스터 생성
+        var monster = PoolManager.Instance.SpawnFromPool(monsterType, spawnPos);
+        monster.GetComponent<MonsterController>().SetNetworkId(monsterId);
+    }
+    
+    /// <summary>
+    /// 웨이브 완료 이벤트
+    /// </summary>
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    public void WaveCompletedRPC(int completedWave, int nextWave)
+    {
+        CurrentWave = nextWave;
+        CurrentWaveState = WaveState.Preparing;
+        MonstersSpawnedThisWave = 0;
+        
+        // 로컬 이벤트 발생
+        GameEvents.TriggerWaveCompleted(completedWave, nextWave);
+    }
+}
+```
+
+## 3. 매니저 시스템 리팩토링
+
+### 3.1 Managers 중앙 관리 시스템
+
+#### Managers.cs (새로운 중앙 매니저)
+```csharp
+/// <summary>
+/// 모든 매니저의 생명주기를 관리하는 중앙 시스템
+/// 기존 GameManager의 역할을 분산하여 단일 책임 원칙 적용
+/// </summary>
+public class Managers : MonoBehaviour
+{
+    private static Managers _instance;
+    public static Managers Instance => _instance;
+    
+    [Header("Network Managers")]
+    [SerializeField] private NetworkManager _networkManager;
+    [SerializeField] private NetworkWaveManager _networkWaveManager;
+    [SerializeField] private NetworkSkillSystem _networkSkillSystem;
+    
+    [Header("Game Managers")]
+    [SerializeField] private PlayerManager _playerManager;
+    [SerializeField] private MonsterManager _monsterManager;
+    [SerializeField] private UIManager _uiManager;
+    [SerializeField] private AudioManager _audioManager;
+    [SerializeField] private PoolManager _poolManager;
+    
+    // 게임 상태 관리
+    public enum GameState { Loading, Lobby, Playing, Paused, GameOver }
+    [Networked] public GameState CurrentState { get; set; } = GameState.Loading;
+    
+    private async UniTask Start()
+    {
+        await InitializeManagersAsync();
+    }
+    
+    private async UniTask InitializeManagersAsync()
+    {
+        ChangeState(GameState.Loading);
+        
+        // 1단계: 네트워크 매니저 초기화
+        await InitializeNetworkManagersAsync();
+        
+        // 2단계: 게임 시스템 매니저 초기화
+        await InitializeGameManagersAsync();
+        
+        // 3단계: UI 매니저 초기화
+        await InitializeUIManagersAsync();
+        
+        ChangeState(GameState.Lobby);
+    }
+}
+```
+
+### 3.2 기능별 매니저 분리
+
+#### PlayerManager (플레이어 전용)
+```csharp
+/// <summary>
+/// 플레이어 데이터 및 상태 관리 전용 매니저
+/// 기존 GameManager에서 플레이어 관련 기능만 분리
+/// </summary>
+public class PlayerManager : BaseManager
+{
+    [Header("Player Settings")]
+    [SerializeField] private PlayerController localPlayer;
+    [SerializeField] private NetworkPlayer networkPlayerPrefab;
+    
+    private Dictionary<int, NetworkPlayer> networkPlayers = new Dictionary<int, NetworkPlayer>();
+    
+    public override async UniTask InitializeAsync()
+    {
+        await base.InitializeAsync();
+        await SetupLocalPlayerAsync();
+        SubscribeToNetworkEvents();
+    }
+    
+    private async UniTask SetupLocalPlayerAsync()
+    {
+        if (localPlayer == null)
+        {
+            localPlayer = FindFirstObjectByType<PlayerController>();
+        }
+        
+        // 로컬 플레이어 초기화
+        await localPlayer.InitializeAsync();
+    }
+    
+    private void SubscribeToNetworkEvents()
+    {
+        // 네트워크 플레이어 이벤트 구독
+        GameEvents.OnPlayerJoined += OnPlayerJoined;
+        GameEvents.OnPlayerLeft += OnPlayerLeft;
+        GameEvents.OnPlayerStateSync += OnPlayerStateSync;
+    }
+    
+    private void OnPlayerJoined(int playerId)
+    {
+        // 새 플레이어 NetworkPlayer 컴포넌트 생성
+        var networkPlayer = Runner.Spawn(networkPlayerPrefab, 
+                                       inputAuthority: PlayerRef.FromIndex(playerId));
+        networkPlayers[playerId] = networkPlayer;
+    }
+}
+```
+
+#### MonsterManager (몬스터 전용)
+```csharp
+/// <summary>
+/// 몬스터 스폰 및 관리 전용 매니저
+/// 기존 GameManager에서 몬스터 관련 기능만 분리
+/// </summary>
+public class MonsterManager : BaseManager
+{
+    [Header("Monster Settings")]
+    [SerializeField] private MonsterSpawner[] spawners;
+    [SerializeField] private int monstersPerWave = 20;
+    
+    private Dictionary<int, MonsterController> activeMonsters = new Dictionary<int, MonsterController>();
+    private int nextMonsterId = 0;
+    
+    public override async UniTask InitializeAsync()
+    {
+        await base.InitializeAsync();
+        await InitializeSpawnersAsync();
+        SubscribeToWaveEvents();
+    }
+    
+    private void SubscribeToWaveEvents()
+    {
+        GameEvents.OnWaveStateChanged += OnWaveStateChanged;
+        GameEvents.OnMonsterSpawnRequested += OnMonsterSpawnRequested;
+    }
+    
+    private void OnMonsterSpawnRequested(Vector3 spawnPos, string monsterType)
+    {
+        // NetworkWaveManager를 통해 스폰 요청
+        var networkWaveManager = GetManager<NetworkWaveManager>();
+        networkWaveManager.SpawnMonsterRPC(spawnPos, monsterType, nextMonsterId++);
+    }
+}
+```
+
+## 4. 네트워크 이벤트 시스템
+
+### 4.1 확장된 GameEvents
+```csharp
+/// <summary>
+/// 네트워크 기반 이벤트 시스템
+/// 기존 GameEvents에 멀티플레이어 이벤트 추가
+/// </summary>
+public static class GameEvents
+{
+    // 기존 싱글플레이어 이벤트들...
+    
+    // 네트워크 플레이어 이벤트
+    public static event System.Action<int> OnPlayerJoined;
+    public static event System.Action<int> OnPlayerLeft;
+    public static event System.Action<int, float, int, PlayerState> OnPlayerStateSync;
+    
+    // 네트워크 스킬 이벤트
+    public static event System.Action<string, Vector3, Vector3, int, int> OnSkillUsedNetwork;
+    public static event System.Action<int, float, Vector3, int> OnMonsterHitNetwork;
+    
+    // 네트워크 웨이브 이벤트
+    public static event System.Action<int, int> OnWaveCompletedNetwork;
+    public static event System.Action<Vector3, string> OnMonsterSpawnRequested;
+    
+    // 네트워크 세션 이벤트
+    public static event System.Action<string> OnSessionJoined;
+    public static event System.Action OnSessionLeft;
+    public static event System.Action<bool> OnConnectionStatusChanged;
+    
+    // 이벤트 트리거 메소드들
+    public static void TriggerPlayerJoined(int playerId)
+        => OnPlayerJoined?.Invoke(playerId);
+    
+    public static void TriggerSkillUsedNetwork(string skillId, Vector3 startPos, Vector3 direction, int playerId, int eventId)
+        => OnSkillUsedNetwork?.Invoke(skillId, startPos, direction, playerId, eventId);
+    
+    public static void TriggerPlayerStateSync(int playerId, float health, int score, PlayerState state)
+        => OnPlayerStateSync?.Invoke(playerId, health, score, state);
+}
+```
+
+### 4.2 네트워크 이벤트 매니저
+```csharp
+/// <summary>
+/// 네트워크 이벤트와 로컬 이벤트 브리징
+/// </summary>
+public class NetworkEventManager : NetworkBehaviour
+{
+    public static NetworkEventManager Instance { get; private set; }
+    
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+    
+    private void Start()
+    {
+        SubscribeToLocalEvents();
+    }
+    
+    private void SubscribeToLocalEvents()
+    {
+        // 로컬 이벤트를 네트워크 RPC로 변환
+        GameEvents.OnSkillUsed += OnLocalSkillUsed;
+        GameEvents.OnMonsterDied += OnLocalMonsterDied;
+        GameEvents.OnPlayerHealthChanged += OnLocalPlayerHealthChanged;
+    }
+    
+    private void OnLocalSkillUsed(string skillId, Vector3 startPos, Vector3 direction)
+    {
+        // 로컬 스킬 사용을 네트워크 이벤트로 변환
+        int eventId = GenerateEventId();
+        int playerId = Object.InputAuthority.PlayerId;
+        
+        var networkSkillSystem = GetComponent<NetworkSkillSystem>();
+        networkSkillSystem.FireProjectileRPC(skillId, startPos, direction, 
+                                            CalculateDamage(skillId), playerId, eventId);
+    }
+    
+    private void OnLocalMonsterDied(int monsterId, Vector3 position)
+    {
+        // 몬스터 사망을 다른 플레이어에게 알림
+        MonsterDeathRPC(monsterId, position);
+    }
+    
+    [Rpc(RpcSources.InputAuthority, RpcTargets.Others)]
+    private void MonsterDeathRPC(int monsterId, Vector3 position)
+    {
+        // 다른 플레이어에게 몬스터 사망 알림
+        var monster = MonsterManager.Instance.GetMonster(monsterId);
+        if (monster != null)
+        {
+            monster.Die();
+        }
+    }
+}
+```
+
+## 5. UI 시스템 확장
+
+### 5.1 네트워크 로비 UI
+```csharp
+/// <summary>
+/// 멀티플레이어 로비 UI 시스템
+/// </summary>
+public class LobbyUI : MonoBehaviour
+{
+    [Header("UI References")]
+    [SerializeField] private InputField roomNameInput;
+    [SerializeField] private Button createRoomButton;
+    [SerializeField] private Button joinRoomButton;
+    [SerializeField] private Button startGameButton;
+    [SerializeField] private Text connectionStatusText;
+    [SerializeField] private Text playersListText;
+    
+    private NetworkManager networkManager;
+    
+    private void Start()
+    {
+        networkManager = Managers.Instance.GetManager<NetworkManager>();
+        SetupUI();
+        SubscribeToEvents();
+    }
+    
+    private void SetupUI()
+    {
+        createRoomButton.onClick.AddListener(OnCreateRoomClicked);
+        joinRoomButton.onClick.AddListener(OnJoinRoomClicked);
+        startGameButton.onClick.AddListener(OnStartGameClicked);
+        
+        startGameButton.interactable = false; // 2명이 모일 때까지 비활성화
+    }
+    
+    private void SubscribeToEvents()
+    {
+        GameEvents.OnPlayerJoined += OnPlayerJoined;
+        GameEvents.OnPlayerLeft += OnPlayerLeft;
+        GameEvents.OnConnectionStatusChanged += OnConnectionStatusChanged;
+    }
+    
+    private async void OnCreateRoomClicked()
+    {
+        string roomName = roomNameInput.text;
+        if (string.IsNullOrEmpty(roomName))
+        {
+            roomName = "Room_" + UnityEngine.Random.Range(1000, 9999);
+        }
+        
+        bool success = await networkManager.StartSharedModeSessionAsync(roomName);
+        if (success)
+        {
+            connectionStatusText.text = $"방 생성됨: {roomName}";
+        }
+        else
+        {
+            connectionStatusText.text = "방 생성 실패";
+        }
+    }
+    
+    private void OnPlayerJoined(int playerId)
+    {
+        UpdatePlayersListUI();
+        
+        // 2명이 모이면 게임 시작 버튼 활성화
+        if (networkManager.ConnectedPlayerCount >= 2)
+        {
+            startGameButton.interactable = true;
+        }
+    }
+    
+    private async void OnStartGameClicked()
+    {
+        // 게임 씬으로 전환
+        await networkManager.LoadGameSceneAsync();
+    }
+}
+```
+
+### 5.2 게임 내 멀티플레이어 UI
+```csharp
+/// <summary>
+/// 게임 내 멀티플레이어 상태 표시 UI
+/// </summary>
+public class MultiplayerGameUI : MonoBehaviour
+{
+    [Header("Player Status UI")]
+    [SerializeField] private PlayerStatusPanel[] playerStatusPanels; // 최대 2개
+    [SerializeField] private Text gameStatusText;
+    [SerializeField] private Text waveInfoText;
+    
+    private void Start()
+    {
+        SubscribeToEvents();
+        InitializePlayerPanels();
+    }
+    
+    private void SubscribeToEvents()
+    {
+        GameEvents.OnPlayerStateSync += OnPlayerStateSync;
+        GameEvents.OnWaveCompletedNetwork += OnWaveCompleted;
+        GameEvents.OnConnectionStatusChanged += OnConnectionStatusChanged;
+    }
+    
+    private void OnPlayerStateSync(int playerId, float health, int score, PlayerState state)
+    {
+        if (playerId < playerStatusPanels.Length)
+        {
+            playerStatusPanels[playerId].UpdateStatus(health, score, state);
+        }
+    }
+    
+    private void OnWaveCompleted(int completedWave, int nextWave)
+    {
+        waveInfoText.text = $"웨이브 {completedWave} 완료! 다음: {nextWave}";
+        
+        // 잠시 후 다음 웨이브 정보로 업데이트
+        Invoke(nameof(UpdateCurrentWaveInfo), 3f);
+    }
+    
+    private void UpdateCurrentWaveInfo()
+    {
+        var waveManager = Managers.Instance.GetManager<NetworkWaveManager>();
+        waveInfoText.text = $"현재 웨이브: {waveManager.CurrentWave}";
+    }
+}
+
+/// <summary>
+/// 개별 플레이어 상태 패널
+/// </summary>
+[System.Serializable]
+public class PlayerStatusPanel
+{
+    [SerializeField] private Text playerNameText;
+    [SerializeField] private Slider healthSlider;
+    [SerializeField] private Text scoreText;
+    [SerializeField] private Text stateText;
+    [SerializeField] private Image connectionIcon;
+    
+    public void UpdateStatus(float health, int score, PlayerState state)
+    {
+        healthSlider.value = health / 100f; // 100을 최대 체력으로 가정
+        scoreText.text = $"Score: {score}";
+        stateText.text = state.ToString();
+    }
+    
+    public void SetConnectionStatus(bool connected)
+    {
+        connectionIcon.color = connected ? Color.green : Color.red;
+    }
+}
+```
+
+## 6. 성능 최적화 및 메모리 관리
+
+### 6.1 네트워크 최적화
+```csharp
+/// <summary>
+/// 네트워크 성능 최적화 설정
+/// </summary>
+public class NetworkOptimizer : MonoBehaviour
+{
+    [Header("Network Settings")]
+    [SerializeField] private int targetFPS = 60;
+    [SerializeField] private int networkTickRate = 20; // 초당 20회 네트워크 업데이트
+    [SerializeField] private float lagCompensation = 0.1f;
+    
+    private void Start()
+    {
+        OptimizeNetworkSettings();
+    }
+    
+    private void OptimizeNetworkSettings()
+    {
+        // 모바일 환경 최적화
+        if (Application.isMobilePlatform)
+        {
+            networkTickRate = 15; // 모바일에서는 더 낮은 틱레이트
+            targetFPS = 30;
+        }
+        
+        // Unity 프레임레이트 설정
+        Application.targetFrameRate = targetFPS;
+        
+        // Fusion 네트워크 설정
+        var runner = FindFirstObjectByType<NetworkRunner>();
+        if (runner != null)
+        {
+            // runner.Config.Simulation.TickRate = networkTickRate;
+        }
+    }
+}
+```
+
+### 6.2 오브젝트 풀링 네트워크 확장
+```csharp
+/// <summary>
+/// 네트워크 환경에서의 오브젝트 풀링 확장
+/// </summary>
+public class NetworkPoolManager : NetworkBehaviour
+{
+    public static NetworkPoolManager Instance { get; private set; }
+    
+    [Header("Network Pool Settings")]
+    [SerializeField] private int maxProjectilesPerPlayer = 50;
+    [SerializeField] private int maxMonstersTotal = 100;
+    
+    private Dictionary<string, Queue<GameObject>> networkPools = new Dictionary<string, Queue<GameObject>>();
+    private Dictionary<int, GameObject> networkObjects = new Dictionary<int, GameObject>();
+    
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            InitializeNetworkPools();
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+    
+    private void InitializeNetworkPools()
+    {
+        // 네트워크 전용 풀 초기화
+        CreateNetworkPool("NetworkProjectile", maxProjectilesPerPlayer * 2);
+        CreateNetworkPool("NetworkMonster", maxMonstersTotal);
+    }
+    
+    private void CreateNetworkPool(string poolKey, int poolSize)
+    {
+        var pool = new Queue<GameObject>();
+        
+        for (int i = 0; i < poolSize; i++)
+        {
+            var obj = CreatePooledObject(poolKey);
+            obj.SetActive(false);
+            pool.Enqueue(obj);
+        }
+        
+        networkPools[poolKey] = pool;
+    }
+    
+    /// <summary>
+    /// 네트워크 동기화가 필요 없는 로컬 오브젝트 스폰
+    /// </summary>
+    public GameObject SpawnLocalObject(string poolKey, Vector3 position, Quaternion rotation)
+    {
+        if (!networkPools.ContainsKey(poolKey))
+        {
+            Debug.LogError($"Pool {poolKey}가 존재하지 않습니다.");
+            return null;
+        }
+        
+        var pool = networkPools[poolKey];
+        GameObject obj = null;
+        
+        if (pool.Count > 0)
+        {
+            obj = pool.Dequeue();
+        }
+        else
+        {
+            obj = CreatePooledObject(poolKey);
+        }
+        
+        obj.transform.position = position;
+        obj.transform.rotation = rotation;
+        obj.SetActive(true);
+        
+        return obj;
+    }
+    
+    /// <summary>
+    /// 로컬 오브젝트를 풀로 반환
+    /// </summary>
+    public void ReturnLocalObject(string poolKey, GameObject obj)
+    {
+        if (networkPools.ContainsKey(poolKey))
+        {
+            obj.SetActive(false);
+            networkPools[poolKey].Enqueue(obj);
+        }
+    }
+}
+```
+
+## 7. 개발 우선순위 및 일정
+
+### 7.1 1일차: 네트워크 기반 구축
+**목표**: Fusion 세션 관리 및 기본 네트워크 연결
+
+**작업 순서**:
+1. **NetworkManager 구현**: 세션 생성/입장 시스템
+2. **LobbyUI 구현**: 방 생성/입장 인터페이스
+3. **NetworkPlayer 기본 구조**: 플레이어 스폰 및 기본 동기화
+4. **기본 RPC 테스트**: 간단한 메시지 동기화 테스트
+
+**체크포인트**:
+- [ ] 2명이 같은 방에 입장 가능
+- [ ] 기본 플레이어 정보 동기화 확인
+- [ ] 연결 상태 UI 정상 동작
+
+### 7.2 2일차: 이벤트 기반 게임플레이
+**목표**: 스킬 시스템 및 몬스터 시스템 네트워크 적용
+
+**작업 순서**:
+1. **NetworkSkillSystem 구현**: 투사체 발사/충돌 RPC
+2. **기존 PlayerController 연동**: 로컬 시스템과 네트워크 이벤트 브리징
+3. **NetworkWaveManager 구현**: 웨이브 진행 동기화
+4. **MonsterManager 네트워크 적용**: 스폰 이벤트 동기화
+
+**체크포인트**:
+- [ ] 스킬 사용이 양쪽 플레이어에게 보임
+- [ ] 몬스터 스폰이 동기화됨
+- [ ] 웨이브 진행이 양쪽에서 일치함
+
+### 7.3 3일차: 통합 및 완성
+**목표**: 스코어 시스템 및 게임 완성도 향상
+
+**작업 순서**:
+1. **매니저 시스템 리팩토링**: Managers 중앙 관리 시스템 적용
+2. **스코어 시스템 네트워크화**: NetworkProperty 활용
+3. **게임 종료 조건**: 결과 화면 및 재시작 기능
+4. **최적화 및 버그 수정**: 성능 튜닝 및 안정성 개선
+
+**체크포인트**:
+- [ ] 게임 시작부터 종료까지 완전한 플로우
+- [ ] 스코어 및 결과가 정확히 동기화
+- [ ] 연결 끊김/재연결 상황 처리
+- [ ] 모바일 환경에서 안정적 동작
+
+## 8. 위험 요소 및 대응 방안
+
+### 8.1 기술적 위험
+| 위험 요소 | 발생 확률 | 영향도 | 대응 방안 |
+|-----------|-----------|--------|-----------|
+| Fusion 학습 곡선 | 높음 | 중간 | 단순한 RPC 위주 설계, 복잡한 동기화 피함 |
+| 네트워크 지연 문제 | 중간 | 높음 | 로컬 예측 + 이벤트 보정, 시각적 피드백 우선 |
+| 기존 코드 충돌 | 중간 | 중간 | 점진적 리팩토링, 기존 로직 최대한 보존 |
+| 동기화 불일치 | 높음 | 높음 | 단순한 상태 머신, 이벤트 ID 기반 중복 방지 |
+
+### 8.2 일정 위험
+| 위험 요소 | 대응 방안 |
+|-----------|-----------|
+| 네트워크 구현 지연 | 로컬 시스템을 먼저 완성 후 네트워크 레이어 추가 |
+| 디버깅 복잡성 | 로컬 테스트 도구 우선 구현, 단계별 검증 |
+| 성능 최적화 시간 부족 | 기본 동작 우선, 최적화는 마지막 단계 |
+
+## 9. 테스트 전략
+
+### 9.1 단계별 테스트
+```csharp
+/// <summary>
+/// 네트워크 기능 테스트를 위한 디버그 도구
+/// </summary>
+public class NetworkDebugger : MonoBehaviour
+{
+    [Header("Debug Settings")]
+    [SerializeField] private bool enableDebugUI = true;
+    [SerializeField] private KeyCode testSkillKey = KeyCode.Space;
+    [SerializeField] private KeyCode testMonsterSpawnKey = KeyCode.M;
+    
+    private void Update()
+    {
+        if (!enableDebugUI) return;
+        
+        // 스킬 테스트
+        if (Input.GetKeyDown(testSkillKey))
+        {
+            TestSkillUse();
+        }
+        
+        // 몬스터 스폰 테스트
+        if (Input.GetKeyDown(testMonsterSpawnKey))
+        {
+            TestMonsterSpawn();
+        }
+    }
+    
+    private void TestSkillUse()
+    {
+        var networkSkillSystem = NetworkSkillSystem.Instance;
+        if (networkSkillSystem != null)
+        {
+            Vector3 startPos = Camera.main.transform.position;
+            Vector3 direction = Camera.main.transform.forward;
+            
+            networkSkillSystem.FireProjectileRPC("TestSkill", startPos, direction, 
+                                                 50f, 0, UnityEngine.Random.Range(0, 10000));
+        }
+    }
+    
+    private void TestMonsterSpawn()
+    {
+        var networkWaveManager = NetworkWaveManager.Instance;
+        if (networkWaveManager != null)
+        {
+            Vector3 spawnPos = Camera.main.transform.position + Vector3.forward * 5f;
+            networkWaveManager.SpawnMonsterRPC(spawnPos, "BasicMonster", 
+                                             UnityEngine.Random.Range(0, 10000));
+        }
+    }
+    
+    private void OnGUI()
+    {
+        if (!enableDebugUI) return;
+        
+        GUILayout.BeginArea(new Rect(10, 10, 300, 400));
+        GUILayout.Label("Network Debug Tools");
+        
+        if (GUILayout.Button("Test Skill Use"))
+        {
+            TestSkillUse();
+        }
+        
+        if (GUILayout.Button("Test Monster Spawn"))
+        {
+            TestMonsterSpawn();
+        }
+        
+        // 네트워크 상태 표시
+        var runner = FindFirstObjectByType<NetworkRunner>();
+        if (runner != null)
+        {
+            GUILayout.Label($"Connected: {runner.IsConnectedToServer}");
+            GUILayout.Label($"Players: {runner.ActivePlayers.Count()}");
+            GUILayout.Label($"Tick: {runner.Tick}");
+        }
+        
+        GUILayout.EndArea();
+    }
+}
+```
+
+### 9.2 자동화된 테스트 시나리오
+```csharp
+/// <summary>
+/// 자동화된 네트워크 테스트 시나리오
+/// </summary>
+public class AutoNetworkTest : MonoBehaviour
+{
+    [System.Serializable]
+    public class TestScenario
+    {
+        public string name;
+        public float duration;
+        public bool testSkills;
+        public bool testMonsterSpawn;
+        public bool testPlayerSync;
+    }
+    
+    [Header("Test Scenarios")]
+    [SerializeField] private TestScenario[] scenarios;
+    [SerializeField] private float scenarioInterval = 5f;
+    
+    private int currentScenarioIndex = 0;
+    private float testTimer = 0f;
+    
+    [ContextMenu("Start Auto Test")]
+    public void StartAutoTest()
+    {
+        currentScenarioIndex = 0;
+        testTimer = 0f;
+        enabled = true;
+    }
+    
+    private void Update()
+    {
+        if (scenarios.Length == 0) return;
+        
+        testTimer += Time.deltaTime;
+        
+        var currentScenario = scenarios[currentScenarioIndex];
+        
+        // 시나리오 실행
+        ExecuteScenario(currentScenario);
+        
+        // 다음 시나리오로 이동
+        if (testTimer >= currentScenario.duration)
+        {
+            testTimer = 0f;
+            currentScenarioIndex = (currentScenarioIndex + 1) % scenarios.Length;
+            
+            Debug.Log($"Switching to scenario: {scenarios[currentScenarioIndex].name}");
+        }
+    }
+    
+    private void ExecuteScenario(TestScenario scenario)
+    {
+        if (scenario.testSkills && testTimer % 1f < Time.deltaTime)
+        {
+            // 1초마다 스킬 테스트
+            TestRandomSkill();
+        }
+        
+        if (scenario.testMonsterSpawn && testTimer % 2f < Time.deltaTime)
+        {
+            // 2초마다 몬스터 스폰 테스트
+            TestRandomMonsterSpawn();
+        }
+        
+        if (scenario.testPlayerSync && testTimer % 0.5f < Time.deltaTime)
+        {
+            // 0.5초마다 플레이어 상태 동기화 테스트
+            TestPlayerStateSync();
+        }
+    }
+}
+```
+
+이 가이드를 바탕으로 기존 싱글플레이어 디펜스 게임을 2인 PvP 멀티플레이어로 확장하면서, 안정적이고 확장 가능한 아키텍처를 구축할 수 있습니다.
