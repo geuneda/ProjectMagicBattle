@@ -27,6 +27,10 @@ namespace MagicBattle.Player
         private bool isAttacking = false;
         private readonly List<GameObject> targetsInRange = new List<GameObject>();
 
+        // WaitForSeconds 캐싱 (가비지 컬렉션 최소화)
+        private readonly WaitForSeconds autoAttackWait = new WaitForSeconds(0.1f);
+        private readonly WaitForSeconds attackAnimationWait = new WaitForSeconds(0.1f);
+
         // 프로퍼티
         public bool CanAttack => Time.time >= lastAttackTime + attackCooldown && !isAttacking;
         public float AttackCooldownRemaining => Mathf.Max(0f, (lastAttackTime + attackCooldown) - Time.time);
@@ -67,7 +71,7 @@ namespace MagicBattle.Player
         {
             while (true)
             {
-                yield return new WaitForSeconds(0.1f);
+                yield return autoAttackWait;
 
                 // 플레이어가 살아있고 공격 가능할 때만 공격
                 if (playerStats != null && playerStats.IsAlive && CanAttack)
@@ -147,7 +151,7 @@ namespace MagicBattle.Player
             ApplyDamageToTarget(target);
 
             // 공격 애니메이션 대기 시간 (임시)
-            yield return new WaitForSeconds(0.1f);
+            yield return attackAnimationWait;
 
             // 상태를 다시 Idle로 변경
             playerStats.ChangeState(PlayerState.Idle);

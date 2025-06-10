@@ -38,6 +38,9 @@ namespace MagicBattle.Player
         private Dictionary<string, int> skillUsageCount = new Dictionary<string, int>();
         private float lastSkillUsageTime = 0f;
 
+        // WaitForSeconds 캐싱 (가비지 컬렉션 최소화)
+        private readonly WaitForSeconds autoSkillCheckWait = new WaitForSeconds(0.1f);
+
         // 이벤트
         public System.Action<SkillData, int> OnSkillAcquired; // 스킬 획득 (스킬, 스택)
         public System.Action<SkillData> OnSkillUpgraded; // 스킬 승급
@@ -262,7 +265,7 @@ namespace MagicBattle.Player
                 }
 
                 // 0.1초마다 체크
-                yield return new WaitForSeconds(0.1f);
+                yield return autoSkillCheckWait;
             }
         }
 
