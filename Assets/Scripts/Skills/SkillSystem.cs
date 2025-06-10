@@ -347,47 +347,6 @@ namespace MagicBattle.Skills
         {
             // 지금은 아래로만 공격하면 됨
             return Vector2.down;
-
-            // Physics2D를 사용하여 범위 내 몬스터 탐지 (성능 최적화)
-            Collider2D[] monstersInRange = Physics2D.OverlapCircleAll(
-                playerTransform.position, 
-                targetSearchRange, 
-                1 << Constants.MONSTER_LAYER // 몬스터 레이어만 탐지
-            );
-            
-            if (monstersInRange.Length == 0)
-            {
-                // 몬스터가 없으면 기본적으로 아래쪽으로 발사
-                return Vector2.down;
-            }
-
-            GameObject nearestMonster = null;
-            float nearestDistance = float.MaxValue;
-
-            foreach (Collider2D monsterCollider in monstersInRange)
-            {
-                // 활성화된 몬스터만 고려
-                if (!monsterCollider.gameObject.activeInHierarchy) continue;
-                
-                // 몬스터가 살아있는지 확인
-                var monsterStats = monsterCollider.GetComponent<MagicBattle.Monster.MonsterStats>();
-                if (monsterStats == null || !monsterStats.IsAlive) continue;
-
-                float distance = Vector2.Distance(playerTransform.position, monsterCollider.transform.position);
-                if (distance < nearestDistance)
-                {
-                    nearestDistance = distance;
-                    nearestMonster = monsterCollider.gameObject;
-                }
-            }
-
-            if (nearestMonster != null)
-            {
-                Vector2 direction = (nearestMonster.transform.position - playerTransform.position).normalized;
-                return direction;
-            }
-
-
         }
 
         /// <summary>

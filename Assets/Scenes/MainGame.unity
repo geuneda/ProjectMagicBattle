@@ -119,6 +119,57 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &267799807
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 267799809}
+  - component: {fileID: 267799808}
+  m_Layer: 0
+  m_Name: NetworkHelper
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &267799808
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 267799807}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9cfd31f81978472c8bdfb67b1840eaf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enableTestUI: 1
+  autoConnectOnStart: 0
+  testRoomName: TestRoom
+  simulatePlayerActions: 0
+  actionInterval: 2
+  testSkillUsage: 1
+  testMonsterSpawning: 1
+--- !u!4 &267799809
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 267799807}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &394390920
 GameObject:
   m_ObjectHideFlags: 0
@@ -128,7 +179,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 394390922}
-  - component: {fileID: 394390921}
+  - component: {fileID: 394390923}
+  - component: {fileID: 394390924}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -136,31 +188,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &394390921
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 394390920}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 396860b4030a045c897b31c8a1597ac3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  currentGameState: 0
-  gameSpeed: 1
-  currentWave: 1
-  currentWaveState: 0
-  waveTimer: 30
-  spawnDuration: 20
-  restDuration: 10
-  monstersPerWave: 20
-  playerController: {fileID: 965108442}
-  gameTime: 0
-  totalMonstersKilled: 0
-  formattedGameTime: 
-  formattedGold: 
 --- !u!4 &394390922
 Transform:
   m_ObjectHideFlags: 0
@@ -176,6 +203,48 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &394390923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 394390920}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6cdb7a7e7357c409d9964207df1c9b8b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _CurrentGameState: 0
+  _GameTime: 0
+  _GameSpeed: 1
+  _CurrentWave: 1
+  _CurrentWaveState: 1
+  _WaveTimer: 30
+  _WaveStateTimer: 0
+  _MonstersSpawnedThisWave: 0
+  _MonstersPerWave: 20
+  spawnDuration: 20
+  restDuration: 10
+--- !u!114 &394390924
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 394390920}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 4108791019
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 394390923}
+  ForceRemoteRenderTimeframe: 0
 --- !u!1 &540227206
 GameObject:
   m_ObjectHideFlags: 0
@@ -278,17 +347,6 @@ MonoBehaviour:
   maxDamageTexts: 100
   healthBarContainer: {fileID: 0}
   damageTextContainer: {fileID: 0}
---- !u!114 &965108442 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 7819041521920492273, guid: 2eb0845fa6f6249ecad14dbc00993e36, type: 3}
-  m_PrefabInstance: {fileID: 634326752952299621}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bc97e8415c0d94f8f8a4ab3ecc98a901, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &985869190
 GameObject:
   m_ObjectHideFlags: 0
@@ -878,6 +936,63 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2041408012
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2041408014}
+  - component: {fileID: 2041408013}
+  m_Layer: 0
+  m_Name: NetworkSetupManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2041408013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2041408012}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0bca98f3155f04f6faf866b6fddd2a3a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  networkPlayerPrefab:
+    RawGuidValue: 00000000000000000000000000000000
+  networkGameManagerPrefab:
+    RawGuidValue: 00000000000000000000000000000000
+  networkProjectilePrefab:
+    RawGuidValue: 00000000000000000000000000000000
+  networkMonsterPrefab:
+    RawGuidValue: 00000000000000000000000000000000
+  playerSpawnPoints: []
+  monsterSpawnPoints: []
+  networkRunnerPrefab: {fileID: 0}
+  autoStartNetwork: 0
+  defaultGameMode: 2
+--- !u!4 &2041408014
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2041408012}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &634326752952299621
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1140,3 +1255,5 @@ SceneRoots:
   - {fileID: 1754240310}
   - {fileID: 985869194}
   - {fileID: 1434824387}
+  - {fileID: 2041408014}
+  - {fileID: 267799809}
