@@ -6,7 +6,6 @@ namespace MagicBattle.Common
 {
     /// <summary>
     /// 중앙집중식 서비스 관리 클래스
-    /// Find 함수 대신 사용하여 성능과 타입 안전성을 향상시킴
     /// </summary>
     public class ServiceLocator : MonoBehaviour
     {
