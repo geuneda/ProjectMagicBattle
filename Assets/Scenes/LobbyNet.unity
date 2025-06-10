@@ -856,7 +856,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   networkPlayerPrefab:
-    RawGuidValue: 00000000000000000000000000000000
+    RawGuidValue: 732cda76b294342f49a11a511f0c74d0
   networkGameManagerPrefab:
     RawGuidValue: 00000000000000000000000000000000
   networkProjectilePrefab:
