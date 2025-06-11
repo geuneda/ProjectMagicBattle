@@ -528,24 +528,6 @@ namespace MagicBattle.Managers
             StartNextWaveRPC();
         }
 
-        /// <summary>
-        /// 게임 재시작
-        /// </summary>
-        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
-        public void RestartGameRPC()
-        {
-            ResetNetworkGameState();
-            
-            // 모든 플레이어 리스폰
-            foreach (var player in networkPlayers.Values)
-            {
-                if (player != null)
-                {
-                    player.RespawnPlayerRPC();
-                }
-            }
-        }
-
         #endregion
 
         #region Cleanup
@@ -580,15 +562,6 @@ namespace MagicBattle.Managers
             if (Object.HasStateAuthority)
             {
                 TogglePauseRPC();
-            }
-        }
-
-        [ContextMenu("테스트: 게임 재시작")]
-        private void TestRestartGame()
-        {
-            if (Object.HasStateAuthority)
-            {
-                RestartGameRPC();
             }
         }
 

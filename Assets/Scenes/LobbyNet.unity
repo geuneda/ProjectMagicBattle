@@ -883,8 +883,7 @@ MonoBehaviour:
   gameMode: 2
   maxPlayers: 2
   defaultRoomName: MagicBattleRoom
-  networkPlayerPrefab:
-    RawGuidValue: 00000000000000000000000000000000
+  networkPlayerPrefab: {fileID: 397039781351445249, guid: 732cda76b294342f49a11a511f0c74d0, type: 3}
 --- !u!224 &921657496 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 6059697078732512475, guid: e12995e2e34874769b97dedf7f6f855f, type: 3}
