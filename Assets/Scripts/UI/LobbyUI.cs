@@ -321,8 +321,13 @@ namespace MagicBattle.UI
             
             UpdateConnectionStatus("게임을 시작합니다...");
             
-            // 게임 씬으로 전환
-            await LoadGameSceneAsync();
+            // NetworkManager를 통한 동기화된 씬 전환
+            bool success = await networkManager.LoadGameSceneAsync();
+            
+            if (!success)
+            {
+                UpdateConnectionStatus("게임 시작에 실패했습니다.");
+            }
         }
 
         /// <summary>
@@ -409,17 +414,13 @@ namespace MagicBattle.UI
         /// <param name="player">참가한 플레이어</param>
         private void OnPlayerJoined(Fusion.PlayerRef player)
         {
+            Debug.Log($"[LobbyUI] 플레이어 참가: {player.PlayerId}");
+            
             UpdatePlayerList();
             UpdateRoomInfo();
             
-            // 2명이 모이면 게임 시작 버튼 활성화 (호스트만)
-            if (networkManager != null && networkManager.IsHost && networkManager.ConnectedPlayerCount >= 2)
-            {
-                if (startGameButton != null)
-                {
-                    startGameButton.interactable = true;
-                }
-            }
+            // 게임 시작 버튼 상태 업데이트
+            UpdateStartGameButton();
         }
 
         /// <summary>
@@ -428,17 +429,74 @@ namespace MagicBattle.UI
         /// <param name="player">나간 플레이어</param>
         private void OnPlayerLeft(Fusion.PlayerRef player)
         {
+            Debug.Log($"[LobbyUI] 플레이어 나감: {player.PlayerId}");
+            
             UpdatePlayerList();
             UpdateRoomInfo();
             
-            // 플레이어가 부족하면 게임 시작 버튼 비활성화
-            if (networkManager != null && networkManager.ConnectedPlayerCount < 2)
+            // 게임 시작 버튼 상태 업데이트
+            UpdateStartGameButton();
+        }
+
+        /// <summary>
+        /// 게임 시작 버튼 상태 업데이트
+        /// </summary>
+        private void UpdateStartGameButton()
+        {
+            if (startGameButton == null || networkManager == null) 
             {
-                if (startGameButton != null)
+                Debug.LogWarning("[LobbyUI] startGameButton 또는 networkManager가 null입니다.");
+                return;
+            }
+            
+            // 현재 플레이어 수 확인
+            int playerCount = networkManager.ConnectedPlayerCount;
+            bool isHost = networkManager.IsHost;
+            bool isRoomCreator = IsRoomCreator();
+            
+            // 상세 디버그 로그
+            Debug.Log($"[LobbyUI] 게임시작 버튼 상태 체크:");
+            Debug.Log($"  - 플레이어 수: {playerCount}/2");
+            Debug.Log($"  - IsHost: {isHost}");
+            Debug.Log($"  - IsRoomCreator: {isRoomCreator}");
+            Debug.Log($"  - Runner.IsServer: {networkManager.Runner?.IsServer}");
+            Debug.Log($"  - LocalPlayer: {networkManager.Runner?.LocalPlayer}");
+            
+            // 2명이 모이고 호스트인 경우에만 활성화
+            bool canStartGame = playerCount >= 2 && (isHost || isRoomCreator);
+            
+            startGameButton.interactable = canStartGame;
+            
+            Debug.Log($"[LobbyUI] 게임시작 버튼 활성화: {canStartGame}");
+            
+            // UI 텍스트 업데이트 (버튼에 텍스트가 있다면)
+            var buttonText = startGameButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (buttonText != null)
+            {
+                buttonText.text = canStartGame ? "게임 시작" : $"대기 중 ({playerCount}/2)";
+            }
+        }
+        
+        /// <summary>
+        /// 방 생성자인지 확인 (Shared Mode용)
+        /// </summary>
+        private bool IsRoomCreator()
+        {
+            if (networkManager?.Runner == null) return false;
+            
+            // 로컬 플레이어가 가장 낮은 PlayerId를 가지면 방 생성자로 간주
+            var localPlayer = networkManager.Runner.LocalPlayer;
+            if (!networkManager.Runner.IsPlayerValid(localPlayer)) return false;
+            
+            foreach (var player in networkManager.Runner.ActivePlayers)
+            {
+                if (player.PlayerId < localPlayer.PlayerId)
                 {
-                    startGameButton.interactable = false;
+                    return false; // 더 낮은 ID가 있으면 방 생성자가 아님
                 }
             }
+            
+            return true; // 가장 낮은 ID면 방 생성자
         }
 
         /// <summary>
@@ -577,34 +635,6 @@ namespace MagicBattle.UI
 
         #endregion
 
-        #region Scene Management
-
-        /// <summary>
-        /// 게임 씬으로 전환
-        /// </summary>
-        private async UniTask LoadGameSceneAsync()
-        {
-            try
-            {
-                // 게임 씬 로드 (UnityEngine.SceneManagement.SceneManager 사용)
-                var asyncOperation = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync("MainGame");
-                
-                while (!asyncOperation.isDone)
-                {
-                    await UniTask.Yield();
-                }
-                
-                Debug.Log("게임 씬 로드 완료");
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"게임 씬 로드 중 오류 발생: {ex.Message}");
-                UpdateConnectionStatus("게임 시작에 실패했습니다.");
-            }
-        }
-
-        #endregion
-
         #region Context Menu for Testing
 
         [ContextMenu("테스트: 방 생성")]
@@ -619,6 +649,28 @@ namespace MagicBattle.UI
             if (networkManager != null)
             {
                 Debug.Log($"네트워크 상태: {networkManager.GetNetworkStatusInfo()}");
+            }
+        }
+        
+        [ContextMenu("테스트: 게임시작 버튼 강제 업데이트")]
+        private void TestForceUpdateStartButton()
+        {
+            UpdateStartGameButton();
+        }
+        
+        [ContextMenu("테스트: 플레이어 목록 출력")]
+        private void TestPrintPlayerList()
+        {
+            if (networkManager?.Runner != null)
+            {
+                Debug.Log($"=== 플레이어 목록 ===");
+                Debug.Log($"총 플레이어 수: {networkManager.ConnectedPlayerCount}");
+                Debug.Log($"로컬 플레이어: {networkManager.Runner.LocalPlayer}");
+                
+                foreach (var player in networkManager.Runner.ActivePlayers)
+                {
+                    Debug.Log($"  - Player {player.PlayerId}: {player}");
+                }
             }
         }
 

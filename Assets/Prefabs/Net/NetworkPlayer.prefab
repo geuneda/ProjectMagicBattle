@@ -46,15 +46,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8e83e8d1741484c7a9cf870c08e44595, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _Health: 100
-  _MaxHealth: 100
-  _Score: 0
-  _CurrentWave: 1
-  _State: 0
-  _Gold: 1000
-  _TotalMonstersKilled: 0
-  localPlayerController: {fileID: 0}
   spawnPoint: {fileID: 0}
+  _Health: 100
+  _Mana: 100
+  _Score: 0
+  _Gold: 1000
+  _State: 0
+  _NetworkPosition: {x: 0, y: 0, z: 0}
+  _NetworkRotation: {x: 0, y: 0, z: 0, w: 0}
   _PlayerId: 0
   _PlayerName:
     _length: 0
@@ -74,7 +73,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   SortKey: 3457353523
   ObjectInterest: 1
-  Flags: 262145
+  Flags: 786433
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 3046724055036675057}

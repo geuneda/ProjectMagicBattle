@@ -2,6 +2,7 @@ using UnityEngine;
 using Fusion;
 using MagicBattle.Common;
 using MagicBattle.Managers;
+using Cysharp.Threading.Tasks;
 
 namespace MagicBattle.Player
 {
@@ -11,26 +12,34 @@ namespace MagicBattle.Player
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
-        [Header("Player Network Data")]
-        [Networked] public float Health { get; set; } = 100f;
-        [Networked] public float MaxHealth { get; set; } = 100f;
-        [Networked] public int Score { get; set; } = 0;
-        [Networked] public int CurrentWave { get; set; } = 1;
-        [Networked] public PlayerState State { get; set; } = PlayerState.Idle;
-        [Networked] public int Gold { get; set; } = 1000;
-        [Networked] public int TotalMonstersKilled { get; set; } = 0;
-        
-        [Header("Local References")]
-        [SerializeField] private PlayerController localPlayerController;
+        [Header("Network Player Settings")]
         [SerializeField] private Transform spawnPoint;
         
-        // 로컬 플레이어 여부
-        public bool IsLocalPlayer => Object.HasInputAuthority;
-        public PlayerRef PlayerRef => Object.InputAuthority;
+        [Header("Player State Sync")]
+        [Networked] public float Health { get; set; } = 100f;
+        [Networked] public float Mana { get; set; } = 100f;
+        [Networked] public int Score { get; set; } = 0;
+        [Networked] public int Gold { get; set; } = 0;
+        [Networked] public PlayerState State { get; set; } = PlayerState.Idle;
+        [Networked] public Vector3 NetworkPosition { get; set; }
+        [Networked] public Quaternion NetworkRotation { get; set; }
+        
+        // 로컬 플레이어 컨트롤러 참조
+        private PlayerController localPlayerController;
+        private PlayerStats localPlayerStats;
+        private bool isLocalPlayer;
+        
+        // 동기화 타이머
+        private float syncTimer = 0f;
+        private const float SYNC_INTERVAL = 0.1f; // 100ms마다 동기화
         
         // 플레이어 식별
         [Networked] public int PlayerId { get; set; }
         [Networked] public NetworkString<_32> PlayerName { get; set; }
+        
+        // 로컬 플레이어 여부
+        public bool IsLocalPlayer => Object.HasInputAuthority;
+        public PlayerRef PlayerRef => Object.InputAuthority;
 
         #region Unity Lifecycle & Network Lifecycle
 
@@ -44,16 +53,23 @@ namespace MagicBattle.Player
             
             Debug.Log($"NetworkPlayer 스폰됨 - ID: {PlayerId}, Local: {IsLocalPlayer}");
             
-            InitializeNetworkPlayer();
+            // 로컬 플레이어인지 확인
+            isLocalPlayer = Object.HasInputAuthority;
             
-            // 로컬 플레이어인 경우 추가 설정
-            if (IsLocalPlayer)
+            if (isLocalPlayer)
             {
                 SetupLocalPlayer();
             }
+            else
+            {
+                SetupRemotePlayer();
+            }
+            
+            // 이벤트 구독
+            SubscribeToEvents();
             
             // 네트워크 이벤트 발생
-            EventManager.Dispatch(GameEventType.PlayerJoined, PlayerId);
+            EventManager.Dispatch(GameEventType.NetworkPlayerSpawned, PlayerId);
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -62,10 +78,26 @@ namespace MagicBattle.Player
             
             Debug.Log($"NetworkPlayer 제거됨 - ID: {PlayerId}");
             
+            // 이벤트 구독 해제
+            UnsubscribeFromEvents();
+            
             // 네트워크 이벤트 발생
-            EventManager.Dispatch(GameEventType.PlayerLeft, PlayerId);
+            EventManager.Dispatch(GameEventType.NetworkPlayerDespawned, PlayerId);
             
             CleanupNetworkPlayer();
+        }
+
+        public override void FixedUpdateNetwork()
+        {
+            if (!isLocalPlayer) return;
+            
+            // 주기적으로 상태 동기화
+            syncTimer += Runner.DeltaTime;
+            if (syncTimer >= SYNC_INTERVAL)
+            {
+                SyncFromLocalPlayer();
+                syncTimer = 0f;
+            }
         }
 
         #endregion
@@ -73,45 +105,29 @@ namespace MagicBattle.Player
         #region Initialization
 
         /// <summary>
-        /// 네트워크 플레이어 초기화
-        /// </summary>
-        private void InitializeNetworkPlayer()
-        {
-            // 스폰 위치 설정
-            if (spawnPoint != null)
-            {
-                transform.position = spawnPoint.position;
-                transform.rotation = spawnPoint.rotation;
-            }
-            else
-            {
-                // 기본 스폰 위치 (플레이어 ID에 따라)
-                float xOffset = PlayerId == 0 ? -5f : 5f;
-                transform.position = new Vector3(xOffset, 0f, 0f);
-            }
-            
-            // 초기 스탯 설정
-            if (Object.HasStateAuthority)
-            {
-                InitializePlayerStats();
-            }
-        }
-
-        /// <summary>
-        /// 로컬 플레이어 추가 설정
+        /// 로컬 플레이어 설정
         /// </summary>
         private void SetupLocalPlayer()
         {
-            // 기존 로컬 PlayerController 연결
-            if (localPlayerController == null)
-            {
-                localPlayerController = FindFirstObjectByType<PlayerController>();
-            }
+            // 기존 PlayerController 찾기
+            localPlayerController = FindFirstObjectByType<PlayerController>();
             
             if (localPlayerController != null)
             {
-                // PlayerController와 NetworkPlayer 연결
-                ConnectWithLocalPlayerController();
+                localPlayerStats = localPlayerController.GetComponent<PlayerStats>();
+                
+                // 기존 플레이어 위치로 이동
+                transform.position = localPlayerController.transform.position;
+                transform.rotation = localPlayerController.transform.rotation;
+                
+                // 네트워크 위치 초기화
+                NetworkPosition = transform.position;
+                NetworkRotation = transform.rotation;
+                
+                // 기존 플레이어 상태 동기화
+                SyncFromLocalPlayer();
+                
+                Debug.Log("로컬 플레이어와 연동 완료");
             }
             else
             {
@@ -120,60 +136,60 @@ namespace MagicBattle.Player
         }
 
         /// <summary>
-        /// 플레이어 초기 스탯 설정
+        /// 원격 플레이어 설정
         /// </summary>
-        private void InitializePlayerStats()
+        private void SetupRemotePlayer()
         {
-            Health = 100f;
-            MaxHealth = 100f;
-            Score = 0;
-            CurrentWave = 1;
-            State = PlayerState.Idle;
-            Gold = 1000;
-            TotalMonstersKilled = 0;
+            // 원격 플레이어는 시각적 표현만 담당
+            // 기본 시각적 요소 설정 (Capsule 등)
+            if (GetComponent<Renderer>() == null)
+            {
+                var capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                capsule.transform.SetParent(transform);
+                capsule.transform.localPosition = Vector3.zero;
+                capsule.GetComponent<Renderer>().material.color = Color.red; // 원격 플레이어는 빨간색
+            }
+            
+            Debug.Log("원격 플레이어 설정 완료");
         }
 
-        #endregion
-
-        #region Local Player Controller Integration
+        /// <summary>
+        /// 이벤트 구독
+        /// </summary>
+        private void SubscribeToEvents()
+        {
+            if (isLocalPlayer && localPlayerController != null)
+            {
+                // 기존 플레이어 이벤트 구독
+                EventManager.Subscribe(GameEventType.PlayerHealthChanged, OnLocalHealthChanged);
+                EventManager.Subscribe(GameEventType.PlayerStateChanged, OnLocalStateChanged);
+                EventManager.Subscribe(GameEventType.GoldChanged, OnLocalGoldChanged);
+            }
+        }
 
         /// <summary>
-        /// 로컬 PlayerController와 연결
+        /// 로컬 플레이어 상태를 네트워크로 동기화
         /// </summary>
-        private void ConnectWithLocalPlayerController()
+        private void SyncFromLocalPlayer()
         {
             if (localPlayerController == null) return;
             
-            // PlayerController의 이벤트 구독
-            SubscribeToLocalPlayerEvents();
+            // 위치 동기화
+            NetworkPosition = localPlayerController.transform.position;
+            NetworkRotation = localPlayerController.transform.rotation;
             
-            // 초기 상태 동기화
-            SyncInitialStateFromLocalPlayer();
-        }
-
-        /// <summary>
-        /// 로컬 플레이어 이벤트 구독
-        /// </summary>
-        private void SubscribeToLocalPlayerEvents()
-        {
-            // EventManager를 통한 이벤트 구독
-            EventManager.Subscribe(GameEventType.PlayerHealthChanged, OnLocalPlayerHealthChanged);
-            EventManager.Subscribe(GameEventType.PlayerStateChanged, OnLocalPlayerStateChanged);
-            EventManager.Subscribe(GameEventType.MonsterKilled, OnLocalPlayerKilledMonster);
-            EventManager.Subscribe(GameEventType.GoldChanged, OnLocalPlayerGoldChanged);
-        }
-
-        /// <summary>
-        /// 로컬 플레이어에서 초기 상태 동기화
-        /// </summary>
-        private void SyncInitialStateFromLocalPlayer()
-        {
-            if (localPlayerController?.Stats == null) return;
-            
-            if (Object.HasInputAuthority)
+            // 상태 동기화 (PlayerStats에서 가져오기)
+            if (localPlayerStats != null)
             {
-                Health = localPlayerController.Stats.CurrentHealth;
-                MaxHealth = localPlayerController.Stats.MaxHealth;
+                Health = localPlayerStats.CurrentHealth;
+                // Mana는 PlayerStats에 없으므로 기본값 유지 또는 별도 처리
+            }
+            
+            // Gold는 GameManager에서 가져오기
+            if (GameManager.Instance != null)
+            {
+                Gold = GameManager.Instance.CurrentGold;
+                // Score는 GameManager에 없으므로 별도 처리 필요
             }
         }
 
@@ -184,49 +200,39 @@ namespace MagicBattle.Player
         /// <summary>
         /// 로컬 플레이어 체력 변화 이벤트 처리
         /// </summary>
-        private void OnLocalPlayerHealthChanged(object args)
+        private void OnLocalHealthChanged(object args)
         {
-            if (!IsLocalPlayer || !Object.HasInputAuthority) return;
-            
-            if (args is float newHealth)
+            if (args is System.Collections.Generic.Dictionary<string, object> healthData)
             {
-                UpdatePlayerHealthRPC(newHealth);
+                if (healthData.TryGetValue("current", out var currentHealth))
+                {
+                    Health = (float)currentHealth;
+                    UpdatePlayerStateRPC(Health, Mana, Score, Gold, State);
+                }
             }
         }
 
         /// <summary>
         /// 로컬 플레이어 상태 변화 이벤트 처리
         /// </summary>
-        private void OnLocalPlayerStateChanged(object args)
+        private void OnLocalStateChanged(object args)
         {
-            if (!IsLocalPlayer || !Object.HasInputAuthority) return;
-            
             if (args is PlayerState newState)
             {
-                UpdatePlayerStateRPC(newState);
+                State = newState;
+                UpdatePlayerStateRPC(Health, Mana, Score, Gold, State);
             }
-        }
-
-        /// <summary>
-        /// 로컬 플레이어 몬스터 처치 이벤트 처리
-        /// </summary>
-        private void OnLocalPlayerKilledMonster(object args)
-        {
-            if (!IsLocalPlayer || !Object.HasInputAuthority) return;
-            
-            UpdateMonsterKilledRPC();
         }
 
         /// <summary>
         /// 로컬 플레이어 골드 변화 이벤트 처리
         /// </summary>
-        private void OnLocalPlayerGoldChanged(object args)
+        private void OnLocalGoldChanged(object args)
         {
-            if (!IsLocalPlayer || !Object.HasInputAuthority) return;
-            
             if (args is int newGold)
             {
-                UpdatePlayerGoldRPC(newGold);
+                Gold = newGold;
+                UpdatePlayerStateRPC(Health, Mana, Score, Gold, State);
             }
         }
 
@@ -235,78 +241,40 @@ namespace MagicBattle.Player
         #region RPC Methods
 
         /// <summary>
-        /// 플레이어 체력 업데이트 RPC
-        /// </summary>
-        [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
-        private void UpdatePlayerHealthRPC(float newHealth)
-        {
-            Health = newHealth;
-            
-            // 다른 플레이어들에게 체력 변화 알림
-            if (!IsLocalPlayer)
-            {
-                EventManager.Dispatch(GameEventType.PlayerHealthChanged, new PlayerHealthChangedArgs
-                {
-                    PlayerId = PlayerId,
-                    Health = newHealth,
-                    MaxHealth = MaxHealth
-                });
-            }
-        }
-
-        /// <summary>
         /// 플레이어 상태 업데이트 RPC
         /// </summary>
         [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
-        private void UpdatePlayerStateRPC(PlayerState newState)
+        public void UpdatePlayerStateRPC(float health, float mana, int score, int gold, PlayerState state)
         {
-            State = newState;
+            Health = health;
+            Mana = mana;
+            Score = score;
+            Gold = gold;
+            State = state;
             
-            // 다른 플레이어들에게 상태 변화 알림
-            if (!IsLocalPlayer)
+            // 네트워크 플레이어 상태 동기화 이벤트 발생
+            var syncData = new NetworkPlayerStateSyncArgs
             {
-                EventManager.Dispatch(GameEventType.PlayerStateChanged, new PlayerStateChangedArgs
-                {
-                    PlayerId = PlayerId,
-                    State = newState
-                });
-            }
+                PlayerId = Object.InputAuthority.PlayerId,
+                Health = health,
+                Mana = mana,
+                Score = score,
+                Gold = gold,
+                State = state
+            };
+            EventManager.Dispatch(GameEventType.NetworkPlayerStateSync, syncData);
         }
 
         /// <summary>
-        /// 몬스터 처치 업데이트 RPC
+        /// 위치 동기화 RPC (필요시 사용)
         /// </summary>
         [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
-        private void UpdateMonsterKilledRPC()
+        public void UpdatePositionRPC(Vector3 position, Quaternion rotation)
         {
-            TotalMonstersKilled++;
-            Score += 10; // 기본 점수 증가
-            
-            // 점수 변화 이벤트 발생
-            EventManager.Dispatch(GameEventType.MonsterKilled, new MonsterKilledArgs
+            if (!isLocalPlayer)
             {
-                PlayerId = PlayerId,
-                TotalKilled = TotalMonstersKilled,
-                NewScore = Score
-            });
-        }
-
-        /// <summary>
-        /// 플레이어 골드 업데이트 RPC
-        /// </summary>
-        [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
-        private void UpdatePlayerGoldRPC(int newGold)
-        {
-            Gold = newGold;
-            
-            // 다른 플레이어들에게 골드 변화 알림
-            if (!IsLocalPlayer)
-            {
-                EventManager.Dispatch(GameEventType.GoldChanged, new PlayerGoldChangedArgs
-                {
-                    PlayerId = PlayerId,
-                    Gold = newGold
-                });
+                transform.position = position;
+                transform.rotation = rotation;
             }
         }
 
@@ -328,11 +296,12 @@ namespace MagicBattle.Player
             if (Health <= 0f)
             {
                 State = PlayerState.Dead;
-                EventManager.Dispatch(GameEventType.PlayerDied, new PlayerDeathArgs
+                var deathArgs = new PlayerDeathArgs
                 {
                     PlayerId = PlayerId,
                     KillerPlayerId = attackerPlayerId
-                });
+                };
+                EventManager.Dispatch(GameEventType.PlayerDied, deathArgs);
             }
         }
 
@@ -342,7 +311,8 @@ namespace MagicBattle.Player
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
         public void RespawnPlayerRPC()
         {
-            Health = MaxHealth;
+            Health = 100f;
+            Mana = 100f;
             State = PlayerState.Idle;
             
             // 스폰 위치로 이동
@@ -362,10 +332,20 @@ namespace MagicBattle.Player
         private void CleanupNetworkPlayer()
         {
             // 이벤트 구독 해제
-            EventManager.Unsubscribe(GameEventType.PlayerHealthChanged, OnLocalPlayerHealthChanged);
-            EventManager.Unsubscribe(GameEventType.PlayerStateChanged, OnLocalPlayerStateChanged);
-            EventManager.Unsubscribe(GameEventType.MonsterKilled, OnLocalPlayerKilledMonster);
-            EventManager.Unsubscribe(GameEventType.GoldChanged, OnLocalPlayerGoldChanged);
+            UnsubscribeFromEvents();
+        }
+
+        /// <summary>
+        /// 이벤트 구독 해제
+        /// </summary>
+        private void UnsubscribeFromEvents()
+        {
+            if (isLocalPlayer)
+            {
+                EventManager.Unsubscribe(GameEventType.PlayerHealthChanged, OnLocalHealthChanged);
+                EventManager.Unsubscribe(GameEventType.PlayerStateChanged, OnLocalStateChanged);
+                EventManager.Unsubscribe(GameEventType.GoldChanged, OnLocalGoldChanged);
+            }
         }
 
         #endregion
@@ -377,7 +357,7 @@ namespace MagicBattle.Player
         {
             if (Object.HasInputAuthority)
             {
-                UpdatePlayerHealthRPC(Health - 20f);
+                UpdatePlayerStateRPC(Health - 20f, Mana, Score, Gold, State);
             }
         }
 
@@ -386,14 +366,14 @@ namespace MagicBattle.Player
         {
             if (Object.HasInputAuthority)
             {
-                UpdatePlayerHealthRPC(Mathf.Min(MaxHealth, Health + 30f));
+                UpdatePlayerStateRPC(Mathf.Min(100f, Health + 30f), Mana, Score, Gold, State);
             }
         }
 
         [ContextMenu("테스트: 플레이어 정보 출력")]
         private void TestPrintPlayerInfo()
         {
-            Debug.Log($"플레이어 정보 - ID: {PlayerId}, 체력: {Health}/{MaxHealth}, 상태: {State}, 점수: {Score}");
+            Debug.Log($"플레이어 정보 - ID: {PlayerId}, 체력: {Health}/{100f}, 마나: {Mana}/{100f}, 상태: {State}, 점수: {Score}");
         }
 
         #endregion
@@ -402,56 +382,17 @@ namespace MagicBattle.Player
     #region Event Data Structures
 
     /// <summary>
-    /// 플레이어 체력 변화 이벤트 데이터
+    /// 네트워크 플레이어 상태 동기화 이벤트 데이터
     /// </summary>
     [System.Serializable]
-    public class PlayerHealthChangedArgs
+    public class NetworkPlayerStateSyncArgs
     {
         public int PlayerId;
         public float Health;
-        public float MaxHealth;
-    }
-
-    /// <summary>
-    /// 플레이어 마나 변화 이벤트 데이터
-    /// </summary>
-    [System.Serializable]
-    public class PlayerManaChangedArgs
-    {
-        public int PlayerId;
         public float Mana;
-        public float MaxMana;
-    }
-
-    /// <summary>
-    /// 플레이어 상태 변화 이벤트 데이터
-    /// </summary>
-    [System.Serializable]
-    public class PlayerStateChangedArgs
-    {
-        public int PlayerId;
-        public PlayerState State;
-    }
-
-    /// <summary>
-    /// 몬스터 처치 이벤트 데이터
-    /// </summary>
-    [System.Serializable]
-    public class MonsterKilledArgs
-    {
-        public int PlayerId;
-        public int TotalKilled;
-        public int NewScore;
-    }
-
-    /// <summary>
-    /// 플레이어 골드 변화 이벤트 데이터
-    /// </summary>
-    [System.Serializable]
-    public class PlayerGoldChangedArgs
-    {
-        public int PlayerId;
+        public int Score;
         public int Gold;
+        public PlayerState State;
     }
 
     /// <summary>
