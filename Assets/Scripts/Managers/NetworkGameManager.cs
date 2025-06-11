@@ -32,9 +32,7 @@ namespace MagicBattle.Managers
         
         // 싱글톤 패턴
         public static NetworkGameManager Instance { get; private set; }
-        
-        // 로컬 매니저 참조
-        private GameManager localGameManager;
+    
         private NetworkManager networkManager;
         
         // 플레이어 관리
@@ -116,13 +114,6 @@ namespace MagicBattle.Managers
         /// </summary>
         private void SetupLocalManagers()
         {
-            localGameManager = GameManager.Instance;
-            networkManager = NetworkManager.Instance;
-            
-            if (localGameManager == null)
-            {
-                Debug.LogWarning("로컬 GameManager를 찾을 수 없습니다.");
-            }
             
             if (networkManager == null)
             {
@@ -218,13 +209,6 @@ namespace MagicBattle.Managers
         public void StartGameRPC()
         {
             ChangeGameStateRPC(GameState.Playing);
-            
-            // 로컬 GameManager와 동기화
-            if (localGameManager != null)
-            {
-                // 로컬 GameManager의 상태도 업데이트
-                // 하지만 로컬 GameManager의 Update는 비활성화해야 함
-            }
         }
 
         /// <summary>
