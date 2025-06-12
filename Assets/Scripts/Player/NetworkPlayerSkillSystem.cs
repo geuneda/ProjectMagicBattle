@@ -102,7 +102,7 @@ namespace MagicBattle.Player
         private void InitializeSkillSystem()
         {
             // 초기 골드 지급
-            networkPlayer.Gold = 200; // 뽑기 4번 가능한 정도
+            networkPlayer.Gold = 1000;
             
             Debug.Log($"플레이어 {networkPlayer.PlayerId} 초기 골드: {networkPlayer.Gold}");
         }
@@ -241,6 +241,24 @@ namespace MagicBattle.Player
         }
 
         /// <summary>
+        /// 활성 스킬 슬롯에서 스킬 제거
+        /// </summary>
+        /// <param name="skillId">제거할 스킬 ID</param>
+        private void RemoveFromActiveSkills(string skillId)
+        {
+            for (int i = 0; i < ActiveSkillIds.Length; i++)
+            {
+                if (ActiveSkillIds[i].ToString() == skillId)
+                {
+                    ActiveSkillIds.Set(i, "");
+                    SkillCooldowns.Set(i, TickTimer.None); // 쿨다운도 초기화
+                    Debug.Log($"스킬 {skillId}을 활성 슬롯 {i}에서 제거");
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
         /// 스킬 합성 시도
         /// </summary>
         /// <param name="skillId">합성할 스킬 ID</param>
@@ -273,7 +291,15 @@ namespace MagicBattle.Player
             }
             
             // 합성 실행
-            SkillCounts.Set(skillIndex, SkillCounts[skillIndex] - combineRequiredCount);
+            int newCount = SkillCounts[skillIndex] - combineRequiredCount;
+            SkillCounts.Set(skillIndex, newCount);
+            
+            // 스킬 개수가 0이 되면 활성 스킬에서 제거
+            if (newCount <= 0)
+            {
+                RemoveFromActiveSkills(skillIdStr);
+                Debug.Log($"스킬 {skillIdStr} 소진으로 활성 스킬에서 제거됨");
+            }
             
             // 다음 등급의 랜덤 스킬 획득
             var nextGradeSkill = SkillDataManager.GetRandomNextGradeSkill(currentSkillData.grade);
@@ -318,8 +344,18 @@ namespace MagicBattle.Player
                 string skillId = ActiveSkillIds[i].ToString();
                 if (!string.IsNullOrEmpty(skillId) && CanUseSkill(i))
                 {
-                    UseSkillRPC(skillId, i);
-                    break; // 한 번에 하나씩만 사용
+                    // 추가 안전 검사: 스킬을 실제로 보유하고 있는지 재확인
+                    if (GetSkillCount(skillId) > 0)
+                    {
+                        UseSkillRPC(skillId, i);
+                        break; // 한 번에 하나씩만 사용
+                    }
+                    else
+                    {
+                        // 보유하지 않은 스킬이 활성 슬롯에 있다면 제거
+                        Debug.LogWarning($"활성 슬롯 {i}에 보유하지 않은 스킬 {skillId}이 있어 제거합니다.");
+                        RemoveFromActiveSkills(skillId);
+                    }
                 }
             }
         }
@@ -331,7 +367,16 @@ namespace MagicBattle.Player
         /// <returns>사용 가능하면 true</returns>
         private bool CanUseSkill(int skillSlotIndex)
         {
-            return SkillCooldowns[skillSlotIndex].ExpiredOrNotRunning(Runner);
+            // 쿨다운 확인
+            if (!SkillCooldowns[skillSlotIndex].ExpiredOrNotRunning(Runner))
+                return false;
+            
+            // 실제로 해당 스킬을 보유하고 있는지 확인
+            string skillId = ActiveSkillIds[skillSlotIndex].ToString();
+            if (string.IsNullOrEmpty(skillId))
+                return false;
+                
+            return GetSkillCount(skillId) > 0;
         }
 
         /// <summary>
