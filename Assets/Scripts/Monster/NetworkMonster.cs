@@ -33,7 +33,6 @@ namespace MagicBattle.Monster
         [SerializeField] private Transform visualTransform;
         [SerializeField] private SpriteRenderer spriteRenderer;
         
-        private Rigidbody2D rb;
         private bool isInitialized = false;
 
         #region Network Lifecycle
@@ -42,22 +41,29 @@ namespace MagicBattle.Monster
         {
             base.Spawned();
             
-            // 컴포넌트 캐싱
-            rb = GetComponent<Rigidbody2D>();
-            if (rb == null)
-            {
-                rb = gameObject.AddComponent<Rigidbody2D>();
-                rb.gravityScale = 0f; // 2D 탑다운이므로 중력 제거
-            }
+            Debug.Log($"🔍 NetworkMonster Spawned 디버깅:");
+            Debug.Log($"  - Object ID: {Object.Id}");
+            Debug.Log($"  - InputAuthority: {Object.InputAuthority}");
+            Debug.Log($"  - StateAuthority: {Object.StateAuthority}");
+            Debug.Log($"  - HasInputAuthority: {Object.HasInputAuthority}");
+            Debug.Log($"  - HasStateAuthority: {Object.HasStateAuthority}");
+            Debug.Log($"  - Runner.IsSharedModeMasterClient: {Runner.IsSharedModeMasterClient}");
+            Debug.Log($"  - Runner.LocalPlayer: {Runner.LocalPlayer}");
+            Debug.Log($"  - Runner.GameMode: {Runner.GameMode}");
             
             // 시각적 컴포넌트 설정
             if (visualTransform == null)
                 visualTransform = transform;
                 
-            // 호스트만 몬스터 로직 초기화
+            // State Authority가 있는 클라이언트만 몬스터 로직 초기화
             if (Object.HasStateAuthority)
             {
                 InitializeMonster();
+                Debug.Log("✅ 몬스터 초기화 완료 (State Authority)");
+            }
+            else
+            {
+                Debug.Log("⏳ 클라이언트 - State Authority 없음, 동기화 대기 중");
             }
             
             isInitialized = true;
@@ -184,8 +190,8 @@ namespace MagicBattle.Monster
             Vector3 direction = (TargetPosition - transform.position).normalized;
             Vector3 newPosition = transform.position + direction * MoveSpeed * Runner.DeltaTime;
             
-            // Rigidbody2D로 이동
-            rb.MovePosition(newPosition);
+            // Transform으로 직접 이동 (NetworkTransform이 동기화 처리)
+            transform.position = newPosition;
             
             // 이동 방향으로 스프라이트 회전 (선택사항)
             if (spriteRenderer != null && direction != Vector3.zero)

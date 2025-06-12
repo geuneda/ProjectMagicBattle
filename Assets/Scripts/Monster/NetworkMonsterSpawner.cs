@@ -167,11 +167,15 @@ namespace MagicBattle.Monster
             // 랜덤한 스폰 포인트 선택
             Transform spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Count)];
             
-            // 몬스터 스폰
+            // Shared Mode에서 Master Client가 State Authority를 가지도록 몬스터 스폰
+            PlayerRef stateAuthority = Runner.IsSharedModeMasterClient ? Runner.LocalPlayer : PlayerRef.None;
+            
+            // 몬스터 스폰 (State Authority 명시)
             NetworkObject monsterObject = Runner.Spawn(
                 monsterPrefab, 
                 spawnPoint.position, 
-                spawnPoint.rotation
+                spawnPoint.rotation,
+                stateAuthority  // State Authority 지정
             );
             
             if (monsterObject != null)
@@ -184,7 +188,7 @@ namespace MagicBattle.Monster
                     
                     MonstersSpawnedThisWave++;
                     
-                    Debug.Log($"몬스터 스폰 완료 - 위치: {spawnPoint.position}, 웨이브: {NetworkGameManager.Instance.CurrentWave}, 스폰된 수: {MonstersSpawnedThisWave}");
+                    Debug.Log($"몬스터 스폰 완료 - 위치: {spawnPoint.position}, 웨이브: {NetworkGameManager.Instance.CurrentWave}, 스폰된 수: {MonstersSpawnedThisWave}, State Authority: {stateAuthority}");
                 }
             }
         }
