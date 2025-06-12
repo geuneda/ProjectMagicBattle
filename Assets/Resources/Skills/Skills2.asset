@@ -16,7 +16,7 @@ MonoBehaviour:
   description: "\uB354 \uAC15\uD55C \uBD88\uD0C0\uB294 \uD654\uC5FC\uAD6C\uB97C \uBC1C\uC0AC\uD55C\uB2E4."
   attribute: 0
   grade: 2
-  skillIcon: {fileID: 0}
+  skillIcon: {fileID: 21300000, guid: 49ba4c51b071648ca90fa9924e38ab43, type: 3}
   damage: 50
   projectileSpeed: 10
   range: 15
