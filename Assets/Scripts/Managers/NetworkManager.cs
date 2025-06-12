@@ -349,12 +349,8 @@ namespace MagicBattle.Managers
                 // 스폰 포인트 확인
                 RegisterSpawnPoints();
 
-                // 이미 스폰되었는지 확인
-                if (spawnedPlayers.ContainsKey(player))
-                {
-                    Debug.Log($"✅ 로컬 플레이어 {player.PlayerId}는 이미 스폰됨");
-                    return;
-                }
+                // 씬 로드 후에는 기존 스폰 체크를 하지 않음 (새로 스폰)
+                Debug.Log($"🎯 씬 로드 완료 후 플레이어 {player.PlayerId} 새로 스폰 시작");
 
                 // 스폰 위치 결정
                 Vector3 spawnPosition = GetPlayerSpawnPositionForLocalPlayer(player);
@@ -677,13 +673,15 @@ namespace MagicBattle.Managers
             // 씬 로드 완료 후 스폰 포인트 자동 등록
             RegisterSpawnPoints();
             
-            // Fusion2 샘플 방식: 로컬 플레이어만 자신을 스폰
+            // 게임 씬에서만 플레이어 스폰
             if (IsGameScene())
             {
                 var localPlayer = runner.LocalPlayer;
                 if (!localPlayer.IsNone && runner.IsPlayerValid(localPlayer))
                 {
                     Debug.Log($"🎮 게임 씬 로드 완료 - 로컬 플레이어 {localPlayer.PlayerId} 스폰 시작");
+                    
+                    // 씬 로드 완료 후 새로 스폰 (기존 스폰 체크 제거)
                     SpawnLocalPlayerAsync(localPlayer).Forget();
                 }
                 else

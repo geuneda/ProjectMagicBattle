@@ -29,6 +29,9 @@ namespace MagicBattle.Player
         // 로컬 플레이어 여부
         public bool IsLocalPlayer => Object.HasInputAuthority;
         public PlayerRef PlayerRef => Object.InputAuthority;
+        
+        // 플레이어 생존 여부
+        public bool IsDead => Health <= 0f;
 
         #region Unity Lifecycle & Network Lifecycle
 
@@ -230,6 +233,82 @@ namespace MagicBattle.Player
 
         #endregion
 
+        #region Gameplay Methods
+
+        /// <summary>
+        /// 데미지 받기
+        /// </summary>
+        /// <param name="damage">받을 데미지</param>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void TakeDamageRpc(float damage)
+        {
+            if (!Object.HasStateAuthority || IsDead) return;
+            
+            Health = Mathf.Max(0f, Health - damage);
+            
+            Debug.Log($"플레이어 {PlayerId}가 {damage} 데미지를 받음. 남은 체력: {Health}");
+            
+            // 사망 처리
+            if (Health <= 0f && State != PlayerState.Dead)
+            {
+                State = PlayerState.Dead;
+                OnPlayerDiedRPC();
+            }
+            
+            // 체력 변화 이벤트
+            EventManager.Dispatch(GameEventType.PlayerHealthChanged, new PlayerHealthChangedArgs
+            {
+                PlayerId = PlayerId,
+                NewHealth = Health,
+                Damage = damage
+            });
+        }
+
+        /// <summary>
+        /// 골드 추가
+        /// </summary>
+        /// <param name="amount">추가할 골드</param>
+        public void AddGold(int amount)
+        {
+            if (!Object.HasStateAuthority) return;
+            
+            Gold += amount;
+            
+            Debug.Log($"플레이어 {PlayerId}가 {amount} 골드 획득. 총 골드: {Gold}");
+            
+            // 골드 변화 이벤트
+            EventManager.Dispatch(GameEventType.GoldChanged, new GoldChangedArgs
+            {
+                PlayerId = PlayerId,
+                NewGold = Gold,
+                AddedAmount = amount
+            });
+        }
+
+        /// <summary>
+        /// 플레이어 사망 알림
+        /// </summary>
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void OnPlayerDiedRPC()
+        {
+            Debug.Log($"💀 플레이어 {PlayerId}가 사망했습니다!");
+            
+            // 시각적 효과 (색상 변경 등)
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.color = Color.gray;
+            }
+            
+            // 사망 이벤트 발생
+            EventManager.Dispatch(GameEventType.PlayerDied, new PlayerDeathArgs
+            {
+                PlayerId = PlayerId,
+                PlayerName = PlayerName.ToString()
+            });
+        }
+
+        #endregion
+
         #region Test Methods
 
         [ContextMenu("🩺 테스트: 상태 출력")]
@@ -291,4 +370,40 @@ namespace MagicBattle.Player
 
         #endregion
     }
+
+    #region Event Args
+
+    /// <summary>
+    /// 플레이어 체력 변화 이벤트 인자
+    /// </summary>
+    [System.Serializable]
+    public class PlayerHealthChangedArgs
+    {
+        public int PlayerId;
+        public float NewHealth;
+        public float Damage;
+    }
+
+    /// <summary>
+    /// 골드 변화 이벤트 인자
+    /// </summary>
+    [System.Serializable]
+    public class GoldChangedArgs
+    {
+        public int PlayerId;
+        public int NewGold;
+        public int AddedAmount;
+    }
+
+    /// <summary>
+    /// 플레이어 사망 이벤트 인자
+    /// </summary>
+    [System.Serializable]
+    public class PlayerDeathArgs
+    {
+        public int PlayerId;
+        public string PlayerName;
+    }
+
+    #endregion
 } 

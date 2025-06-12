@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 3046724055036675057}
   - component: {fileID: 3102020375526370008}
   - component: {fileID: -2964636455383313528}
+  - component: {fileID: -5133714522017349442}
   m_Layer: 0
   m_Name: NetworkPlayer
   m_TagString: Untagged
@@ -76,6 +77,7 @@ MonoBehaviour:
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 3046724055036675057}
+  - {fileID: -5133714522017349442}
   ForceRemoteRenderTimeframe: 0
 --- !u!212 &-2964636455383313528
 SpriteRenderer:
@@ -132,3 +134,23 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &-5133714522017349442
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 397039781351445249}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 908fe6fdf12ee431793533cc9d2a0b09, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  projectilePrefab:
+    RawGuidValue: 00000000000000000000000000000000
+  maxSkillSlots: 6
+  gachaCost: 50
+  combineRequiredCount: 3
+  _OwnedSkillIds: []
+  _SkillCounts: 
+  _ActiveSkillIds: []

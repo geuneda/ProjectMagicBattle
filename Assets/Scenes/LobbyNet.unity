@@ -858,16 +858,18 @@ MonoBehaviour:
   networkPlayerPrefab:
     RawGuidValue: 732cda76b294342f49a11a511f0c74d0
   networkGameManagerPrefab:
-    RawGuidValue: 00000000000000000000000000000000
-  networkProjectilePrefab:
-    RawGuidValue: 00000000000000000000000000000000
-  networkMonsterPrefab:
-    RawGuidValue: 00000000000000000000000000000000
+    RawGuidValue: a1b2c3d4e5f6789012345678901234ab
+  networkMonsterSpawnerPrefab:
+    RawGuidValue: eed8f1fa274d24df78c49445fdfa5aed
   playerSpawnPoints: []
   monsterSpawnPoints: []
   networkRunnerPrefab: {fileID: 0}
   autoStartNetwork: 0
   defaultGameMode: 2
+  gameSceneNames:
+  - MainGame
+  lobbySceneNames:
+  - LobbyNet
 --- !u!114 &883567954
 MonoBehaviour:
   m_ObjectHideFlags: 0

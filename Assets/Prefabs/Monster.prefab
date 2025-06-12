@@ -9,11 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2932982029050452266}
-  - component: {fileID: 4618785382944929347}
-  - component: {fileID: 1500524114720674882}
-  - component: {fileID: 8899980781817455744}
   - component: {fileID: 8335295447849748095}
-  - component: {fileID: 5764588396202807615}
+  - component: {fileID: 3825412458389590665}
+  - component: {fileID: 4890859539937089027}
   m_Layer: 9
   m_Name: Monster
   m_TagString: Monster
@@ -36,72 +34,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &4618785382944929347
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8052755920032764324}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6bd0a5c6d310d46869f81a9e6b3fc0dc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  monsterStats: {fileID: 0}
-  monsterAI: {fileID: 0}
-  spriteRenderer: {fileID: 0}
-  animator: {fileID: 0}
-  monsterSprite: {fileID: 21300000, guid: fa8d7e24e8b094f028e98ed7813eed4d, type: 3}
---- !u!114 &1500524114720674882
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8052755920032764324}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 523d9e8b2d7f242c18978cd22d63c8a1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  maxHealth: 30
-  currentHealth: 0
-  moveSpeed: 2
-  attackDamage: 15
-  attackCooldown: 1.5
-  goldReward: 10
-  currentState: 0
-  attackRange: 1
-  playerLayerMask:
-    serializedVersion: 2
-    m_Bits: 0
-  OnHealthChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  OnMonsterDeath:
-    m_PersistentCalls:
-      m_Calls: []
-  OnDamageTaken:
-    m_PersistentCalls:
-      m_Calls: []
-  OnStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
---- !u!114 &8899980781817455744
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8052755920032764324}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d2a0aca9090d84140a79d1802fcd5be5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  updateInterval: 0.1
-  stoppingDistance: 0.1
 --- !u!212 &8335295447849748095
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -157,39 +89,46 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!58 &5764588396202807615
-CircleCollider2D:
+--- !u!114 &3825412458389590665
+MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8052755920032764324}
   m_Enabled: 1
-  serializedVersion: 3
-  m_Density: 1
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_ForceSendLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ForceReceiveLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_ContactCaptureLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_CallbackLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_IsTrigger: 1
-  m_UsedByEffector: 0
-  m_CompositeOperation: 0
-  m_CompositeOrder: 0
-  m_Offset: {x: 0, y: 0}
-  m_Radius: 0.5
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85b40c2cbb3ba40848f771edf2026e36, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _Health: 100
+  _MaxHealth: 100
+  _MoveSpeed: 2
+  _AttackDamage: 20
+  _GoldReward: 10
+  _CurrentState: 0
+  _TargetPlayer: {fileID: 0}
+  _TargetPosition: {x: 0, y: 0, z: 0}
+  attackRange: 1
+  attackCooldown: 2
+  visualTransform: {fileID: 2932982029050452266}
+  spriteRenderer: {fileID: 8335295447849748095}
+--- !u!114 &4890859539937089027
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8052755920032764324}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  SortKey: 1398733386
+  ObjectInterest: 1
+  Flags: 262145
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 3825412458389590665}
+  ForceRemoteRenderTimeframe: 0

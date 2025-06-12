@@ -1,0 +1,473 @@
+using UnityEngine;
+using Fusion;
+using MagicBattle.Common;
+using MagicBattle.Skills;
+using MagicBattle.Managers;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace MagicBattle.Player
+{
+    /// <summary>
+    /// 네트워크 플레이어 스킬 시스템
+    /// 스킬 소유, 쿨다운 관리, 자동 발사, 뽑기 및 합성 시스템
+    /// </summary>
+    public class NetworkPlayerSkillSystem : NetworkBehaviour
+    {
+        [Header("Skill System Settings")]
+        [SerializeField] private NetworkPrefabRef projectilePrefab;
+        [SerializeField] private int maxSkillSlots = 6;
+        [SerializeField] private int gachaCost = 50; // 뽑기 비용
+        [SerializeField] private int combineRequiredCount = 3; // 합성 필요 개수
+        
+        [Header("Skill Inventory")]
+        [Networked, Capacity(18)] // 3속성 x 3등급 x 2개씩 최대 보유 가능
+        public NetworkArray<NetworkString<_32>> OwnedSkillIds { get; }
+        
+        [Networked, Capacity(18)]
+        public NetworkArray<int> SkillCounts { get; } // 각 스킬의 보유 개수
+        
+        [Header("Active Skills")]
+        [Networked, Capacity(6)] // 최대 6개 활성 스킬 슬롯
+        public NetworkArray<NetworkString<_32>> ActiveSkillIds { get; }
+        
+        [Networked, Capacity(6)]
+        public NetworkArray<TickTimer> SkillCooldowns { get; } // 각 스킬의 쿨다운
+        
+        [Networked] private int NextSkillIndex { get; set; } = 0; // 다음 사용할 스킬 인덱스
+        
+        private NetworkPlayer networkPlayer;
+        private Dictionary<string, SkillData> skillDataCache = new();
+        private bool isInitialized = false;
+
+        #region Network Lifecycle
+
+        public override void Spawned()
+        {
+            base.Spawned();
+            
+            networkPlayer = GetComponent<NetworkPlayer>();
+            if (networkPlayer == null)
+            {
+                Debug.LogError("NetworkPlayer 컴포넌트를 찾을 수 없습니다!");
+                return;
+            }
+            
+            // 스킬 데이터 초기화
+            SkillDataManager.Initialize();
+            InitializeSkillCache();
+            
+            // 호스트만 스킬 시스템 초기화
+            if (Object.HasStateAuthority && networkPlayer.IsLocalPlayer)
+            {
+                InitializeSkillSystem();
+            }
+            
+            isInitialized = true;
+            Debug.Log($"NetworkPlayerSkillSystem 초기화 완료 - Player {networkPlayer.PlayerId}");
+        }
+
+        public override void FixedUpdateNetwork()
+        {
+            if (!isInitialized || !Object.HasInputAuthority) return;
+            
+            // 자동 스킬 사용
+            AutoUseSkills();
+        }
+
+        #endregion
+
+        #region Initialization
+
+        /// <summary>
+        /// 스킬 데이터 캐시 초기화
+        /// </summary>
+        private void InitializeSkillCache()
+        {
+            var allSkills = SkillDataManager.GetAllSkills();
+            skillDataCache.Clear();
+            
+            foreach (var skill in allSkills)
+            {
+                skillDataCache[skill.SkillId] = skill;
+            }
+        }
+
+        /// <summary>
+        /// 스킬 시스템 초기화 (로컬 플레이어만)
+        /// </summary>
+        private void InitializeSkillSystem()
+        {
+            // 초기 골드 지급
+            networkPlayer.Gold = 200; // 뽑기 4번 가능한 정도
+            
+            Debug.Log($"플레이어 {networkPlayer.PlayerId} 초기 골드: {networkPlayer.Gold}");
+        }
+
+        #endregion
+
+        #region Gacha System (뽑기 시스템)
+
+        /// <summary>
+        /// 스킬 뽑기 실행
+        /// </summary>
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        public void PerformGachaRPC()
+        {
+            if (!Object.HasStateAuthority) return;
+            
+            // 골드 체크
+            if (networkPlayer.Gold < gachaCost)
+            {
+                Debug.Log($"골드 부족! 현재: {networkPlayer.Gold}, 필요: {gachaCost}");
+                return;
+            }
+            
+            // 골드 차감
+            networkPlayer.Gold -= gachaCost;
+            
+            // 랜덤 1등급 스킬 획득
+            var randomSkill = SkillDataManager.GetRandomGrade1Skill();
+            if (randomSkill != null)
+            {
+                AddSkillToInventory(randomSkill.SkillId);
+                NotifySkillAcquiredRPC(randomSkill.SkillId);
+                
+                Debug.Log($"뽑기 성공! {randomSkill.DisplayName} 획득. 남은 골드: {networkPlayer.Gold}");
+            }
+            else
+            {
+                Debug.LogError("뽑기 실패: 사용 가능한 스킬이 없습니다.");
+            }
+        }
+
+        /// <summary>
+        /// 스킬 획득 알림
+        /// </summary>
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void NotifySkillAcquiredRPC(NetworkString<_32> skillId)
+        {
+            var skillData = GetSkillData(skillId.ToString());
+            if (skillData != null)
+            {
+                Debug.Log($"🎉 {networkPlayer.PlayerName}이 {skillData.DisplayName} 스킬을 획득했습니다!");
+                
+                // UI 업데이트 이벤트 발생
+                EventManager.Dispatch(GameEventType.InventoryChanged, new SkillAcquiredArgs
+                {
+                    PlayerId = networkPlayer.PlayerId,
+                    SkillId = skillId.ToString(),
+                    SkillData = skillData
+                });
+            }
+        }
+
+        #endregion
+
+        #region Skill Inventory Management
+
+        /// <summary>
+        /// 스킬을 인벤토리에 추가
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        private void AddSkillToInventory(string skillId)
+        {
+            // 기존에 보유한 스킬인지 확인
+            for (int i = 0; i < OwnedSkillIds.Length; i++)
+            {
+                if (OwnedSkillIds[i].ToString() == skillId)
+                {
+                    // 이미 보유한 스킬이면 개수 증가
+                    SkillCounts.Set(i, SkillCounts[i] + 1);
+                    
+                    // 자동으로 활성 스킬 슬롯에 추가 (첫 번째 획득시에만)
+                    if (SkillCounts[i] == 1)
+                    {
+                        AddToActiveSkills(skillId);
+                    }
+                    
+                    return;
+                }
+            }
+            
+            // 새로운 스킬이면 빈 슬롯에 추가
+            for (int i = 0; i < OwnedSkillIds.Length; i++)
+            {
+                if (string.IsNullOrEmpty(OwnedSkillIds[i].ToString()))
+                {
+                    OwnedSkillIds.Set(i, skillId);
+                    SkillCounts.Set(i, 1);
+                    
+                    // 활성 스킬 슬롯에 추가
+                    AddToActiveSkills(skillId);
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 활성 스킬 슬롯에 스킬 추가
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        private void AddToActiveSkills(string skillId)
+        {
+            // 빈 활성 스킬 슬롯 찾기
+            for (int i = 0; i < ActiveSkillIds.Length; i++)
+            {
+                if (string.IsNullOrEmpty(ActiveSkillIds[i].ToString()))
+                {
+                    ActiveSkillIds.Set(i, skillId);
+                    Debug.Log($"스킬 {skillId}을 활성 슬롯 {i}에 추가");
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 스킬 합성 시도
+        /// </summary>
+        /// <param name="skillId">합성할 스킬 ID</param>
+        [Rpc(RpcSources.InputAuthority, RpcTargets.StateAuthority)]
+        public void TryCombineSkillRPC(NetworkString<_32> skillId)
+        {
+            if (!Object.HasStateAuthority) return;
+            
+            string skillIdStr = skillId.ToString();
+            int skillIndex = GetSkillInventoryIndex(skillIdStr);
+            
+            if (skillIndex == -1)
+            {
+                Debug.Log("보유하지 않은 스킬입니다.");
+                return;
+            }
+            
+            if (SkillCounts[skillIndex] < combineRequiredCount)
+            {
+                Debug.Log($"합성 불가: {SkillCounts[skillIndex]}/{combineRequiredCount}개 보유");
+                return;
+            }
+            
+            // 현재 스킬 데이터 가져오기
+            var currentSkillData = GetSkillData(skillIdStr);
+            if (currentSkillData == null || !currentSkillData.HasNextGrade)
+            {
+                Debug.Log("합성 불가: 최고 등급이거나 스킬 데이터를 찾을 수 없습니다.");
+                return;
+            }
+            
+            // 합성 실행
+            SkillCounts.Set(skillIndex, SkillCounts[skillIndex] - combineRequiredCount);
+            
+            // 다음 등급의 랜덤 스킬 획득
+            var nextGradeSkill = SkillDataManager.GetRandomNextGradeSkill(currentSkillData.grade);
+            if (nextGradeSkill != null)
+            {
+                AddSkillToInventory(nextGradeSkill.SkillId);
+                NotifySkillCombinedRPC(skillIdStr, nextGradeSkill.SkillId);
+            }
+        }
+
+        /// <summary>
+        /// 스킬 합성 알림
+        /// </summary>
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void NotifySkillCombinedRPC(NetworkString<_32> fromSkillId, NetworkString<_32> toSkillId)
+        {
+            var fromSkill = GetSkillData(fromSkillId.ToString());
+            var toSkill = GetSkillData(toSkillId.ToString());
+            
+            if (fromSkill != null && toSkill != null)
+            {
+                Debug.Log($"🔥 {networkPlayer.PlayerName}이 {fromSkill.DisplayName}을 합성하여 {toSkill.DisplayName}을 획득했습니다!");
+            }
+        }
+
+        #endregion
+
+        #region Auto Skill Usage
+
+        /// <summary>
+        /// 자동 스킬 사용
+        /// </summary>
+        private void AutoUseSkills()
+        {
+            // 게임이 진행 중이 아니면 스킬 사용하지 않음
+            if (NetworkGameManager.Instance == null || !NetworkGameManager.Instance.IsGamePlaying)
+                return;
+            
+            // 사용 가능한 스킬 찾기
+            for (int attempts = 0; attempts < ActiveSkillIds.Length; attempts++)
+            {
+                int currentIndex = (NextSkillIndex + attempts) % ActiveSkillIds.Length;
+                string skillId = ActiveSkillIds[currentIndex].ToString();
+                
+                if (!string.IsNullOrEmpty(skillId) && CanUseSkill(currentIndex))
+                {
+                    UseSkill(currentIndex, skillId);
+                    NextSkillIndex = (currentIndex + 1) % ActiveSkillIds.Length;
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 스킬 사용 가능 여부 확인
+        /// </summary>
+        /// <param name="skillSlotIndex">스킬 슬롯 인덱스</param>
+        /// <returns>사용 가능하면 true</returns>
+        private bool CanUseSkill(int skillSlotIndex)
+        {
+            return SkillCooldowns[skillSlotIndex].ExpiredOrNotRunning(Runner);
+        }
+
+        /// <summary>
+        /// 스킬 사용
+        /// </summary>
+        /// <param name="skillSlotIndex">스킬 슬롯 인덱스</param>
+        /// <param name="skillId">스킬 ID</param>
+        private void UseSkill(int skillSlotIndex, string skillId)
+        {
+            var skillData = GetSkillData(skillId);
+            if (skillData == null) return;
+            
+            // 투사체 발사
+            FireProjectile(skillData);
+            
+            // 쿨다운 설정
+            SkillCooldowns.Set(skillSlotIndex, TickTimer.CreateFromSeconds(Runner, skillData.cooldown));
+            
+            Debug.Log($"스킬 사용: {skillData.DisplayName} (쿨다운: {skillData.cooldown}초)");
+        }
+
+        /// <summary>
+        /// 투사체 발사
+        /// </summary>
+        /// <param name="skillData">스킬 데이터</param>
+        private void FireProjectile(SkillData skillData)
+        {
+            // 플레이어 위치에서 발사
+            Vector3 firePosition = transform.position;
+            
+            // 투사체 스폰
+            var projectileObject = Runner.Spawn(
+                projectilePrefab,
+                firePosition,
+                Quaternion.identity,
+                Object.InputAuthority
+            );
+            
+            if (projectileObject != null)
+            {
+                var projectile = projectileObject.GetComponent<NetworkProjectile>();
+                if (projectile != null)
+                {
+                    projectile.Initialize(skillData, networkPlayer);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Helper Methods
+
+        /// <summary>
+        /// 스킬 데이터 가져오기
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        /// <returns>스킬 데이터</returns>
+        private SkillData GetSkillData(string skillId)
+        {
+            skillDataCache.TryGetValue(skillId, out var skillData);
+            return skillData;
+        }
+
+        /// <summary>
+        /// 스킬 인벤토리 인덱스 가져오기
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        /// <returns>인벤토리 인덱스 (-1이면 없음)</returns>
+        private int GetSkillInventoryIndex(string skillId)
+        {
+            for (int i = 0; i < OwnedSkillIds.Length; i++)
+            {
+                if (OwnedSkillIds[i].ToString() == skillId)
+                    return i;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// 특정 스킬 보유 개수 가져오기
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        /// <returns>보유 개수</returns>
+        public int GetSkillCount(string skillId)
+        {
+            int index = GetSkillInventoryIndex(skillId);
+            return index != -1 ? SkillCounts[index] : 0;
+        }
+
+        #endregion
+
+        #region Public Interface
+
+        /// <summary>
+        /// 뽑기 시도 (UI에서 호출)
+        /// </summary>
+        public void TryGacha()
+        {
+            if (!Object.HasInputAuthority) return;
+            PerformGachaRPC();
+        }
+
+        /// <summary>
+        /// 스킬 합성 시도 (UI에서 호출)
+        /// </summary>
+        /// <param name="skillId">합성할 스킬 ID</param>
+        public void TryCombineSkill(string skillId)
+        {
+            if (!Object.HasInputAuthority) return;
+            TryCombineSkillRPC(skillId);
+        }
+
+        #endregion
+
+        #region Debug Methods
+
+        [ContextMenu("테스트: 골드 추가")]
+        private void TestAddGold()
+        {
+            if (Object.HasStateAuthority)
+            {
+                networkPlayer.Gold += 100;
+                Debug.Log($"골드 추가! 현재 골드: {networkPlayer.Gold}");
+            }
+        }
+
+        [ContextMenu("테스트: 강제 뽑기")]
+        private void TestForceGacha()
+        {
+            if (Object.HasInputAuthority)
+            {
+                PerformGachaRPC();
+            }
+        }
+
+        #endregion
+    }
+
+    #region Event Args
+
+    /// <summary>
+    /// 스킬 획득 이벤트 인자
+    /// </summary>
+    [System.Serializable]
+    public class SkillAcquiredArgs
+    {
+        public int PlayerId;
+        public string SkillId;
+        public SkillData SkillData;
+    }
+
+    #endregion
+} 
