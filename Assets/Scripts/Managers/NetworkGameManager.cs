@@ -308,7 +308,8 @@ namespace MagicBattle.Managers
             // 스폰 시간 동안 몬스터 스폰
             if (WaveStateTimer >= spawnDuration || MonstersSpawnedThisWave >= MonstersPerWave)
             {
-                ChangeWaveStateRPC(WaveState.Fighting);
+                // 스폰이 끝나면 바로 휴식(완료) 상태로 이동
+                ChangeWaveStateRPC(WaveState.Completed);
                 return;
             }
             

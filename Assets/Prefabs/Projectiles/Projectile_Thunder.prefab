@@ -106,12 +106,15 @@ MonoBehaviour:
   _Damage: 50
   _Speed: 10
   _Range: 15
-  _Attribute: 0
+  _Attribute: 2
   _Owner: {fileID: 0}
   _HasPiercing: 0
   _HasAreaDamage: 0
   _AreaRadius: 0
   trailRenderer: {fileID: 0}
+  fireHitEffectPrefab: {fileID: 0}
+  iceHitEffectPrefab: {fileID: 0}
+  thunderHitEffectPrefab: {fileID: 8771972552311404799, guid: bbf9e36a48d6c5648a13889afab076fd, type: 3}
 --- !u!114 &8860228848660325948
 MonoBehaviour:
   m_ObjectHideFlags: 0

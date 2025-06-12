@@ -289,6 +289,13 @@ namespace MagicBattle.Monster
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         public void TakeDamageRPC(float damage, NetworkPlayer attacker = null)
         {
+            // 안전성 검사
+            if (Object == null || !Object.IsValid)
+            {
+                Debug.LogWarning("몬스터가 아직 Spawned되지 않아서 데미지 처리를 건너뜁니다.");
+                return;
+            }
+            
             if (!Object.HasStateAuthority || CurrentState == MonsterState.Dead) return;
             
             Health -= damage;
@@ -324,7 +331,7 @@ namespace MagicBattle.Monster
             // 골드 지급
             if (killer != null)
             {
-                killer.AddGold(GoldReward);
+                killer.AddGoldRPC(GoldReward);
                 Debug.Log($"{killer.name}이 몬스터를 처치하여 {GoldReward} 골드 획득");
             }
             

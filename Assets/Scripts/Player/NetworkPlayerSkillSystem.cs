@@ -74,7 +74,7 @@ namespace MagicBattle.Player
             // 자신의 플레이어만 스킬 사용 로직 실행
             if (Object.HasInputAuthority)
             {
-                AutoUseSkills();
+            AutoUseSkills();
             }
         }
 
@@ -118,6 +118,13 @@ namespace MagicBattle.Player
         public void PerformGachaRPC()
         {
             if (!Object.HasStateAuthority) return;
+            
+            // 플레이어가 사망했으면 뽑기 금지
+            if (networkPlayer.IsDead)
+            {
+                Debug.Log("사망한 플레이어는 뽑기를 할 수 없습니다.");
+                return;
+            }
             
             // 골드 체크
             if (networkPlayer.Gold < gachaCost)
@@ -294,15 +301,16 @@ namespace MagicBattle.Player
         /// </summary>
         private void AutoUseSkills()
         {
-            // 활성 스킬 슬롯을 순회하며 사용 가능한 스킬 찾기
+            // 플레이어가 사망했으면 스킬 사용 금지
+            if (networkPlayer.IsDead)
+                return;
+                
+            // 활성 스킬들을 순차적으로 사용
             for (int i = 0; i < ActiveSkillIds.Length; i++)
             {
                 string skillId = ActiveSkillIds[i].ToString();
-                if (string.IsNullOrEmpty(skillId)) continue;
-                
-                if (CanUseSkill(i))
+                if (!string.IsNullOrEmpty(skillId) && CanUseSkill(i))
                 {
-                    // RPC를 통해 스킬 사용을 모든 클라이언트에 전파
                     UseSkillRPC(skillId, i);
                     break; // 한 번에 하나씩만 사용
                 }

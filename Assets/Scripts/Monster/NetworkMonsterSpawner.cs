@@ -4,6 +4,8 @@ using MagicBattle.Common;
 using MagicBattle.Managers;
 using MagicBattle.Player;
 using System.Collections.Generic;
+using System.Linq;
+
 
 namespace MagicBattle.Monster
 {
@@ -16,8 +18,9 @@ namespace MagicBattle.Monster
         [Header("Spawn Settings")]
         [SerializeField] private NetworkPrefabRef monsterPrefab;
         [SerializeField] private float spawnDistanceFromPlayer = 10f;
-        [SerializeField] private float spawnInterval = 1f;
+        [SerializeField] private float spawnInterval = 2f; // 양쪽에 동시 스폰하므로 간격 증가
         [SerializeField] private int maxMonstersPerWave = 20;
+        // [SerializeField] private float spawnAreaRadius = 5f; // 더 이상 사용하지 않음 (정확한 X축 스폰)
         
         [Header("Monster Stats")]
         [SerializeField] private float baseHealth = 100f;
@@ -30,7 +33,6 @@ namespace MagicBattle.Monster
         
         public static NetworkMonsterSpawner Instance { get; private set; }
         
-        private List<Transform> spawnPoints = new List<Transform>();
         private bool isInitialized = false;
 
         #region Unity & Network Lifecycle
@@ -51,12 +53,10 @@ namespace MagicBattle.Monster
         {
             base.Spawned();
             
-            // 스폰 포인트 초기화
-            InitializeSpawnPoints();
-            
             // 이벤트 구독
             EventManager.Subscribe(GameEventType.MonsterShouldSpawn, OnMonsterSpawnRequested);
             EventManager.Subscribe(GameEventType.WaveChanged, OnWaveChanged);
+            EventManager.Subscribe(GameEventType.WaveStateChanged, OnWaveStateChanged);
             
             isInitialized = true;
             Debug.Log("NetworkMonsterSpawner 초기화 완료");
@@ -82,48 +82,9 @@ namespace MagicBattle.Monster
                 // 이벤트 구독 해제
                 EventManager.Unsubscribe(GameEventType.MonsterShouldSpawn, OnMonsterSpawnRequested);
                 EventManager.Unsubscribe(GameEventType.WaveChanged, OnWaveChanged);
+                EventManager.Unsubscribe(GameEventType.WaveStateChanged, OnWaveStateChanged);
                 
                 Instance = null;
-            }
-        }
-
-        #endregion
-
-        #region Initialization
-
-        /// <summary>
-        /// 스폰 포인트 초기화
-        /// 플레이어들의 아래쪽에 동적으로 생성
-        /// </summary>
-        private void InitializeSpawnPoints()
-        {
-            spawnPoints.Clear();
-            
-            // 모든 활성 플레이어 찾기
-            foreach (var playerRef in Runner.ActivePlayers)
-            {
-                if (Runner.TryGetPlayerObject(playerRef, out var playerObject))
-                {
-                    var networkPlayer = playerObject.GetComponent<NetworkPlayer>();
-                    if (networkPlayer != null)
-                    {
-                        // 플레이어 아래쪽에 스폰 포인트 생성
-                        Vector3 spawnPointPosition = networkPlayer.transform.position + Vector3.down * spawnDistanceFromPlayer;
-                        
-                        GameObject spawnPointObj = new GameObject($"SpawnPoint_Player_{playerRef.PlayerId}");
-                        spawnPointObj.transform.position = spawnPointPosition;
-                        spawnPointObj.transform.SetParent(transform);
-                        
-                        spawnPoints.Add(spawnPointObj.transform);
-                        
-                        Debug.Log($"플레이어 {playerRef.PlayerId}용 스폰 포인트 생성: {spawnPointPosition}");
-                    }
-                }
-            }
-            
-            if (spawnPoints.Count == 0)
-            {
-                Debug.LogWarning("스폰 포인트를 생성할 수 없습니다. 플레이어가 없습니다.");
             }
         }
 
@@ -154,42 +115,90 @@ namespace MagicBattle.Monster
         }
 
         /// <summary>
-        /// 몬스터 스폰
+        /// 활성 플레이어들의 위치 가져오기 (살아있는 플레이어만)
+        /// </summary>
+        /// <returns>플레이어 위치 리스트</returns>
+        private List<Vector3> GetActivePlayerPositions()
+        {
+            List<Vector3> playerPositions = new List<Vector3>();
+            
+            foreach (var playerRef in Runner.ActivePlayers)
+            {
+                if (Runner.TryGetPlayerObject(playerRef, out var playerObject))
+                {
+                    var networkPlayer = playerObject.GetComponent<NetworkPlayer>();
+                    if (networkPlayer != null && !networkPlayer.IsDead) // 살아있는 플레이어만
+                    {
+                        playerPositions.Add(networkPlayer.transform.position);
+                    }
+                }
+            }
+            
+            return playerPositions;
+        }
+
+        /// <summary>
+        /// 플레이어 주변의 스폰 위치 계산
+        /// </summary>
+        /// <param name="playerPosition">플레이어 위치</param>
+        /// <returns>스폰 위치</returns>
+        private Vector3 GetSpawnPositionAroundPlayer(Vector3 playerPosition)
+        {
+            // 플레이어의 정확한 X축, 아래쪽에 스폰
+            Vector3 spawnPosition = new Vector3(
+                playerPosition.x, // 플레이어와 같은 X축
+                playerPosition.y - spawnDistanceFromPlayer, // 플레이어 아래
+                playerPosition.z // 플레이어와 같은 Z축
+            );
+            
+            return spawnPosition;
+        }
+
+        /// <summary>
+        /// 몬스터 스폰 (개선된 버전)
         /// </summary>
         private void SpawnMonster()
         {
-            if (spawnPoints.Count == 0)
+            List<Vector3> playerPositions = GetActivePlayerPositions();
+            
+            if (playerPositions.Count == 0)
             {
-                Debug.LogWarning("스폰 포인트가 없어 몬스터를 스폰할 수 없습니다.");
+                Debug.LogWarning("활성 플레이어가 없어 몬스터를 스폰할 수 없습니다.");
                 return;
             }
             
-            // 랜덤한 스폰 포인트 선택
-            Transform spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Count)];
-            
-            // Shared Mode에서는 서버가 State Authority를 가지도록 몬스터 스폰
-            // PlayerRef.None을 사용하면 서버가 자동으로 State Authority를 가짐
-            PlayerRef stateAuthority = PlayerRef.None;
-            
-            // 몬스터 스폰 (서버가 State Authority를 가지도록 수정)
-            NetworkObject monsterObject = Runner.Spawn(
-                monsterPrefab, 
-                spawnPoint.position, 
-                spawnPoint.rotation,
-                stateAuthority  // 서버가 State Authority를 가지도록 설정
-            );
-            
-            if (monsterObject != null)
+            // 모든 플레이어 아래에 동시에 몬스터 스폰
+            foreach (Vector3 playerPosition in playerPositions)
             {
-                var monster = monsterObject.GetComponent<NetworkMonster>();
-                if (monster != null)
+                // 웨이브 최대 몬스터 수 체크
+                if (MonstersSpawnedThisWave >= maxMonstersPerWave)
+                    break;
+                
+                Vector3 spawnPosition = GetSpawnPositionAroundPlayer(playerPosition);
+                
+                // Shared Mode에서는 서버가 State Authority를 가지도록 몬스터 스폰
+                PlayerRef stateAuthority = PlayerRef.None;
+                
+                // 몬스터 스폰
+                NetworkObject monsterObject = Runner.Spawn(
+                    monsterPrefab, 
+                    spawnPosition, 
+                    Quaternion.identity,
+                    stateAuthority
+                );
+                
+                if (monsterObject != null)
                 {
-                    // 웨이브 난이도에 따른 스탯 설정
-                    SetMonsterStats(monster);
-                    
-                    MonstersSpawnedThisWave++;
-                    
-                    Debug.Log($"몬스터 스폰 완료 - 위치: {spawnPoint.position}, 웨이브: {NetworkGameManager.Instance.CurrentWave}, 스폰된 수: {MonstersSpawnedThisWave}, State Authority: 서버");
+                    var monster = monsterObject.GetComponent<NetworkMonster>();
+                    if (monster != null)
+                    {
+                        // 웨이브 난이도에 따른 스탯 설정
+                        SetMonsterStats(monster);
+                        
+                        MonstersSpawnedThisWave++;
+                        
+                        Debug.Log($"몬스터 스폰 완료 - 위치: {spawnPosition}, 플레이어 위치: {playerPosition}, 웨이브: {NetworkGameManager.Instance.CurrentWave}, 스폰된 수: {MonstersSpawnedThisWave}");
+                    }
                 }
             }
         }
@@ -200,14 +209,17 @@ namespace MagicBattle.Monster
         /// <param name="monster">설정할 몬스터</param>
         private void SetMonsterStats(NetworkMonster monster)
         {
-            float difficultyMultiplier = NetworkGameManager.Instance.WaveDifficultyMultiplier;
+            if (NetworkGameManager.Instance == null) return;
             
-            float health = baseHealth * difficultyMultiplier;
-            float moveSpeed = baseMoveSpeed * (1f + (difficultyMultiplier - 1f) * 0.3f); // 이동속도는 조금만 증가
-            float attackDamage = baseAttackDamage * difficultyMultiplier;
-            int goldReward = Mathf.RoundToInt(baseGoldReward * (1f + (difficultyMultiplier - 1f) * 0.5f));
+            int currentWave = NetworkGameManager.Instance.CurrentWave;
+            float difficultyMultiplier = 1f + (currentWave - 1) * 0.2f; // 웨이브마다 20% 증가
             
-            monster.SetStats(health, moveSpeed, attackDamage, goldReward);
+            monster.SetStats(
+                health: baseHealth * difficultyMultiplier,
+                moveSpeed: baseMoveSpeed * (1f + (currentWave - 1) * 0.1f), // 웨이브마다 10% 증가
+                attackDamage: baseAttackDamage * difficultyMultiplier,
+                goldReward: Mathf.RoundToInt(baseGoldReward * difficultyMultiplier)
+            );
         }
 
         /// <summary>
@@ -223,27 +235,21 @@ namespace MagicBattle.Monster
         #region Event Handlers
 
         /// <summary>
-        /// 몬스터 스폰 요청 이벤트 처리
+        /// 몬스터 스폰 요청 이벤트 핸들러
         /// </summary>
         /// <param name="args">이벤트 인자</param>
         private void OnMonsterSpawnRequested(object args)
         {
             if (!Object.HasStateAuthority) return;
             
-            if (args is MonsterSpawnRequestArgs spawnArgs)
-            {
-                Debug.Log($"몬스터 스폰 요청 받음 - 웨이브: {spawnArgs.Wave}");
-                
-                // 스폰 타이머가 없으면 즉시 스폰 시작
-                if (SpawnTimer.ExpiredOrNotRunning(Runner))
-                {
-                    ResetSpawnTimer();
-                }
-            }
+            // 즉시 스폰 타이머 만료시켜서 다음 FixedUpdateNetwork에서 스폰되도록 함
+            SpawnTimer = TickTimer.None;
+            
+            Debug.Log("몬스터 스폰 요청 받음");
         }
 
         /// <summary>
-        /// 웨이브 변경 이벤트 처리
+        /// 웨이브 변경 이벤트 핸들러
         /// </summary>
         /// <param name="args">이벤트 인자</param>
         private void OnWaveChanged(object args)
@@ -252,17 +258,30 @@ namespace MagicBattle.Monster
             
             if (args is WaveChangedArgs waveArgs)
             {
-                Debug.Log($"새 웨이브 시작 - 웨이브: {waveArgs.NewWave}");
+                Debug.Log($"웨이브 변경됨: {waveArgs.NewWave}");
                 
-                // 웨이브별 몬스터 수 조정
-                maxMonstersPerWave = waveArgs.MonstersPerWave;
-                MonstersSpawnedThisWave = 0;
+                // 새 웨이브 시작 시 스폰 카운터 리셋
+                ResetWaveSpawning();
+            }
+        }
+
+        /// <summary>
+        /// 웨이브 상태 변경 이벤트 핸들러
+        /// </summary>
+        /// <param name="args">이벤트 인자</param>
+        private void OnWaveStateChanged(object args)
+        {
+            if (!Object.HasStateAuthority) return;
+            
+            if (args is WaveStateChangedArgs stateArgs)
+            {
+                Debug.Log($"웨이브 상태 변경됨: {stateArgs.NewState}");
                 
-                // 스폰 포인트 재생성 (플레이어 위치가 변경될 수 있으므로)
-                InitializeSpawnPoints();
-                
-                // 스폰 타이머 초기화
-                ResetSpawnTimer();
+                if (stateArgs.NewState == WaveState.Spawning)
+                {
+                    // 스폰 상태가 되면 스폰 타이머 시작
+                    ResetSpawnTimer();
+                }
             }
         }
 
@@ -271,27 +290,26 @@ namespace MagicBattle.Monster
         #region Public Methods
 
         /// <summary>
-        /// 스폰 포인트 강제 업데이트
+        /// 스폰 포인트 새로고침 (RPC)
         /// </summary>
         [Rpc(RpcSources.StateAuthority, RpcTargets.StateAuthority)]
         public void RefreshSpawnPointsRPC()
         {
-            InitializeSpawnPoints();
+            // 더 이상 정적 스폰 포인트를 사용하지 않으므로 빈 메서드
+            Debug.Log("스폰 포인트 새로고침 (동적 스폰 시스템 사용 중)");
         }
 
         /// <summary>
-        /// 현재 웨이브의 스폰 상태 초기화
+        /// 웨이브 스폰 리셋
         /// </summary>
         public void ResetWaveSpawning()
         {
-            if (!Object.HasStateAuthority) return;
-            
             MonstersSpawnedThisWave = 0;
-            ResetSpawnTimer();
+            Debug.Log("웨이브 스폰 상태 리셋");
         }
 
         /// <summary>
-        /// 몬스터 강제 스폰 (디버그용)
+        /// 테스트용 강제 스폰
         /// </summary>
         [ContextMenu("테스트: 몬스터 강제 스폰")]
         public void ForceSpawnMonster()

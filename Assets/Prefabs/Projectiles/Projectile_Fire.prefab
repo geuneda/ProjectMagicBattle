@@ -112,6 +112,9 @@ MonoBehaviour:
   _HasAreaDamage: 0
   _AreaRadius: 0
   trailRenderer: {fileID: 0}
+  fireHitEffectPrefab: {fileID: 725748389856807714, guid: 4bda94453d2ca7444a0fff05b2d425f5, type: 3}
+  iceHitEffectPrefab: {fileID: 0}
+  thunderHitEffectPrefab: {fileID: 0}
 --- !u!114 &7601243383427147684
 MonoBehaviour:
   m_ObjectHideFlags: 0

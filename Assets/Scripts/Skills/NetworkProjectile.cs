@@ -26,6 +26,9 @@ namespace MagicBattle.Skills
         
         [Header("Visual Components")]
         [SerializeField] private TrailRenderer trailRenderer;
+        [SerializeField] private GameObject fireHitEffectPrefab;
+        [SerializeField] private GameObject iceHitEffectPrefab;
+        [SerializeField] private GameObject thunderHitEffectPrefab;
         
         [Networked] private Vector3 StartPosition { get; set; }
         [Networked] private Vector3 Direction { get; set; }
@@ -186,6 +189,12 @@ namespace MagicBattle.Skills
                 var monster = collider.GetComponent<NetworkMonster>();
                 if (monster != null && !hitMonsters.Contains(monster))
                 {
+                    // 몬스터가 아직 Spawned되지 않았으면 스킵
+                    if (monster.Object == null || !monster.Object.IsValid)
+                    {
+                        continue;
+                    }
+                    
                     HitMonster(monster);
                     
                     // 관통이 아니면 투사체 제거
@@ -204,8 +213,15 @@ namespace MagicBattle.Skills
         /// <param name="monster">타격당한 몬스터</param>
         private void HitMonster(NetworkMonster monster)
         {
-            // 이미 맞은 몬스터는 스킵 (관통 시에도 한 번만 맞음)
-            if (hitMonsters.Contains(monster)) return;
+            // 몬스터가 null이거나 이미 맞은 몬스터는 스킵
+            if (monster == null || hitMonsters.Contains(monster)) return;
+            
+            // 몬스터가 아직 Spawned되지 않았으면 스킵
+            if (monster.Object == null || !monster.Object.IsValid) 
+            {
+                Debug.LogWarning("몬스터가 아직 Spawned되지 않아서 데미지 처리를 건너뜁니다.");
+                return;
+            }
             
             hitMonsters.Add(monster);
             
@@ -237,6 +253,12 @@ namespace MagicBattle.Skills
                 var monster = collider.GetComponent<NetworkMonster>();
                 if (monster != null && !hitMonsters.Contains(monster))
                 {
+                    // 몬스터가 아직 Spawned되지 않았으면 스킵
+                    if (monster.Object == null || !monster.Object.IsValid)
+                    {
+                        continue;
+                    }
+                    
                     hitMonsters.Add(monster);
                     
                     // 범위 데미지는 원본 데미지의 70%
@@ -255,8 +277,37 @@ namespace MagicBattle.Skills
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
         private void PlayHitEffectRPC(Vector3 position)
         {
-            // TODO: 속성별 타격 효과 파티클 재생
-            Debug.Log($"타격 효과 재생 - 위치: {position}, 속성: {Attribute}");
+            GameObject effectPrefab = GetHitEffectPrefab();
+            
+            if (effectPrefab != null)
+            {
+                // 파티클 효과 생성
+                GameObject effectInstance = Instantiate(effectPrefab, position, Quaternion.identity);
+                
+                // 자동 제거 (파티클 시스템 재생 시간 후)
+                Destroy(effectInstance, 2f);
+                
+                Debug.Log($"타격 효과 재생 - 위치: {position}, 속성: {Attribute}");
+            }
+            else
+            {
+                Debug.LogWarning($"타격 효과 프리팹이 설정되지 않음 - 속성: {Attribute}");
+            }
+        }
+        
+        /// <summary>
+        /// 속성별 타격 효과 프리팹 가져오기
+        /// </summary>
+        /// <returns>타격 효과 프리팹</returns>
+        private GameObject GetHitEffectPrefab()
+        {
+            return Attribute switch
+            {
+                SkillAttribute.Fire => fireHitEffectPrefab,
+                SkillAttribute.Ice => iceHitEffectPrefab,
+                SkillAttribute.Thunder => thunderHitEffectPrefab,
+                _ => fireHitEffectPrefab // 기본값
+            };
         }
 
         #endregion
@@ -271,27 +322,6 @@ namespace MagicBattle.Skills
             if (Object.HasStateAuthority)
             {
                 Runner.Despawn(Object);
-            }
-        }
-
-        #endregion
-
-        #region Debug
-
-        /// <summary>
-        /// 기즈모 그리기 (범위 표시)
-        /// </summary>
-        private void OnDrawGizmosSelected()
-        {
-            // 투사체 위치 표시
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(transform.position, 0.5f);
-            
-            // 범위 데미지 영역 표시
-            if (HasAreaDamage && AreaRadius > 0f)
-            {
-                Gizmos.color = Color.red;
-                Gizmos.DrawWireSphere(transform.position, AreaRadius);
             }
         }
 

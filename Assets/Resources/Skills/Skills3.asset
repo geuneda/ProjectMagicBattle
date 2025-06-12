@@ -23,7 +23,7 @@ MonoBehaviour:
   range: 15
   cooldown: 2
   projectilePrefab: {fileID: 5953545495418054763, guid: 0250cda5bfb73462ea1df735d08d5d2b, type: 3}
-  hitEffectPrefab: {fileID: 0}
+  hitEffectPrefab: {fileID: 725748389856807714, guid: 4bda94453d2ca7444a0fff05b2d425f5, type: 3}
   skillColor: {r: 1, g: 1, b: 1, a: 1}
   hasPiercing: 1
   hasAreaDamage: 0

@@ -231,6 +231,28 @@ namespace MagicBattle.Player
             }
         }
 
+        /// <summary>
+        /// 골드 추가
+        /// </summary>
+        /// <param name="amount">추가할 골드</param>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void AddGoldRPC(int amount)
+        {
+            if (!Object.HasStateAuthority) return;
+            
+            Gold += amount;
+            
+            Debug.Log($"플레이어 {PlayerId}가 {amount} 골드 획득. 총 골드: {Gold}");
+            
+            // 골드 변화 이벤트
+            EventManager.Dispatch(GameEventType.GoldChanged, new GoldChangedArgs
+            {
+                PlayerId = PlayerId,
+                NewGold = Gold,
+                AddedAmount = amount
+            });
+        }
+
         #endregion
 
         #region Gameplay Methods
@@ -261,27 +283,6 @@ namespace MagicBattle.Player
                 PlayerId = PlayerId,
                 NewHealth = Health,
                 Damage = damage
-            });
-        }
-
-        /// <summary>
-        /// 골드 추가
-        /// </summary>
-        /// <param name="amount">추가할 골드</param>
-        public void AddGold(int amount)
-        {
-            if (!Object.HasStateAuthority) return;
-            
-            Gold += amount;
-            
-            Debug.Log($"플레이어 {PlayerId}가 {amount} 골드 획득. 총 골드: {Gold}");
-            
-            // 골드 변화 이벤트
-            EventManager.Dispatch(GameEventType.GoldChanged, new GoldChangedArgs
-            {
-                PlayerId = PlayerId,
-                NewGold = Gold,
-                AddedAmount = amount
             });
         }
 
