@@ -152,7 +152,7 @@ namespace MagicBattle.Player
         }
 
         /// <summary>
-        /// 스킬 획득 알림
+        /// 스킬 획득 알림 (모든 클라이언트)
         /// </summary>
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
         private void NotifySkillAcquiredRPC(NetworkString<_32> skillId)
@@ -160,15 +160,22 @@ namespace MagicBattle.Player
             var skillData = GetSkillData(skillId.ToString());
             if (skillData != null)
             {
-                Debug.Log($"🎉 {networkPlayer.PlayerName}이 {skillData.DisplayName} 스킬을 획득했습니다!");
-                
-                // UI 업데이트 이벤트 발생
-                EventManager.Dispatch(GameEventType.InventoryChanged, new SkillAcquiredArgs
+                // 로컬 플레이어인 경우에만 UI 이벤트 발생
+                if (Object.HasInputAuthority)
+                {
+                    // 스킬 획득 이벤트 발생 (UI 업데이트용)
+                    var eventArgs = new SkillAcquiredArgs
                 {
                     PlayerId = networkPlayer.PlayerId,
                     SkillId = skillId.ToString(),
                     SkillData = skillData
-                });
+                    };
+                    
+                    EventManager.Dispatch(GameEventType.InventoryChanged, eventArgs);
+                    Debug.Log($"스킬 획득 이벤트 발생: {skillData.skillName}");
+                }
+                
+                Debug.Log($"🎉 {networkPlayer.PlayerName}이 {skillData.DisplayName}을 획득했습니다!");
             }
         }
 
@@ -304,7 +311,7 @@ namespace MagicBattle.Player
             // 플레이어가 사망했으면 스킬 사용 금지
             if (networkPlayer.IsDead)
                 return;
-                
+            
             // 활성 스킬들을 순차적으로 사용
             for (int i = 0; i < ActiveSkillIds.Length; i++)
             {
@@ -389,6 +396,10 @@ namespace MagicBattle.Player
                 return;
             }
             
+            // 스택 보너스 계산
+            int stackCount = GetSkillCount(skillData.SkillId);
+            SkillData enhancedSkillData = CalculateStackBonus(skillData, stackCount);
+            
             // 투사체 스폰 (NetworkObject를 직접 스폰)
             var projectileObject = Runner.Spawn(
                 networkObject,
@@ -402,10 +413,120 @@ namespace MagicBattle.Player
                 var projectile = projectileObject.GetComponent<NetworkProjectile>();
                 if (projectile != null)
                 {
-                    projectile.Initialize(skillData, networkPlayer);
+                    // 강화된 스킬 데이터로 초기화 (원본 스킬 데이터를 직접 사용)
+                    projectile.Initialize(skillData, enhancedSkillData, networkPlayer);
+                    
+                    if (stackCount > 1)
+                    {
+                        Debug.Log($"🚀 강화된 투사체 발사: {skillData.DisplayName} (스택 {stackCount}, 데미지 {enhancedSkillData.damage:F1})");
+                    }
+                    else
+                    {
                     Debug.Log($"🚀 투사체 발사: {skillData.DisplayName}");
+                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// 스택 개수에 따른 스킬 보너스 계산
+        /// </summary>
+        /// <param name="originalSkill">원본 스킬 데이터</param>
+        /// <param name="stackCount">스택 개수</param>
+        /// <returns>강화된 스킬 데이터</returns>
+        private SkillData CalculateStackBonus(SkillData originalSkill, int stackCount)
+        {
+            if (stackCount <= 1) return originalSkill;
+
+            // 원본 스킬 데이터를 복사하여 수정
+            SkillData enhancedSkill = ScriptableObject.CreateInstance<SkillData>();
+            
+            // 기본 데이터 복사 (SkillId는 읽기 전용이므로 제외)
+            enhancedSkill.skillName = originalSkill.skillName;
+            enhancedSkill.description = originalSkill.description;
+            enhancedSkill.skillIcon = originalSkill.skillIcon;
+            enhancedSkill.attribute = originalSkill.attribute;
+            enhancedSkill.grade = originalSkill.grade;
+            enhancedSkill.projectilePrefab = originalSkill.projectilePrefab;
+            enhancedSkill.hitEffectPrefab = originalSkill.hitEffectPrefab;
+            enhancedSkill.skillColor = originalSkill.skillColor;
+            enhancedSkill.statusEffectDuration = originalSkill.statusEffectDuration;
+            
+            // 스택 보너스 계산 (스택당 10% 증가)
+            float stackMultiplier = 1f + (stackCount - 1) * 0.1f;
+            
+            // 강화된 능력치 적용
+            enhancedSkill.damage = originalSkill.damage * stackMultiplier;
+            enhancedSkill.projectileSpeed = originalSkill.projectileSpeed * Mathf.Min(stackMultiplier, 2f); // 속도는 최대 2배까지
+            enhancedSkill.range = originalSkill.range * Mathf.Min(stackMultiplier, 1.5f); // 사거리는 최대 1.5배까지
+            
+            // 쿨다운은 스택이 많을수록 약간 감소 (최대 20% 감소)
+            float cooldownReduction = Mathf.Min((stackCount - 1) * 0.02f, 0.2f);
+            enhancedSkill.cooldown = originalSkill.cooldown * (1f - cooldownReduction);
+            
+            // 기타 속성들은 원본과 동일
+            enhancedSkill.hasPiercing = originalSkill.hasPiercing;
+            enhancedSkill.hasAreaDamage = originalSkill.hasAreaDamage;
+            enhancedSkill.areaRadius = originalSkill.areaRadius;
+            
+            // 특수 효과: 5스택 이상에서 관통 효과 추가
+            if (stackCount >= 5 && !enhancedSkill.hasPiercing)
+            {
+                enhancedSkill.hasPiercing = true;
+                Debug.Log($"✨ {originalSkill.skillName} 5스택 달성: 관통 효과 획득!");
+            }
+            
+            // 특수 효과: 10스택 이상에서 범위 데미지 추가/강화
+            if (stackCount >= 10)
+            {
+                if (!enhancedSkill.hasAreaDamage)
+                {
+                    enhancedSkill.hasAreaDamage = true;
+                    enhancedSkill.areaRadius = 2f;
+                    Debug.Log($"✨ {originalSkill.skillName} 10스택 달성: 범위 데미지 효과 획득!");
+                }
+                else
+                {
+                    enhancedSkill.areaRadius = originalSkill.areaRadius * 1.5f;
+                    Debug.Log($"✨ {originalSkill.skillName} 10스택 달성: 범위 데미지 강화!");
+                }
+            }
+            
+            return enhancedSkill;
+        }
+
+        /// <summary>
+        /// 스킬의 현재 강화 상태 정보 가져오기 (UI 표시용)
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        /// <returns>강화 정보 문자열</returns>
+        public string GetSkillEnhancementInfo(string skillId)
+        {
+            var originalSkill = GetSkillData(skillId);
+            if (originalSkill == null) return "";
+
+            int stackCount = GetSkillCount(skillId);
+            if (stackCount <= 1) return "";
+
+            var enhancedSkill = CalculateStackBonus(originalSkill, stackCount);
+            
+            string info = $"스택 {stackCount}:\n";
+            info += $"데미지: {originalSkill.damage:F1} → {enhancedSkill.damage:F1}\n";
+            info += $"속도: {originalSkill.projectileSpeed:F1} → {enhancedSkill.projectileSpeed:F1}\n";
+            info += $"쿨다운: {originalSkill.cooldown:F1}초 → {enhancedSkill.cooldown:F1}초";
+            
+            // 특수 효과 표시
+            if (stackCount >= 5 && !originalSkill.hasPiercing && enhancedSkill.hasPiercing)
+            {
+                info += "\n✨ 관통 효과 활성화!";
+            }
+            
+            if (stackCount >= 10 && (!originalSkill.hasAreaDamage || enhancedSkill.areaRadius > originalSkill.areaRadius))
+            {
+                info += "\n✨ 범위 데미지 강화!";
+            }
+            
+            return info;
         }
 
         #endregion

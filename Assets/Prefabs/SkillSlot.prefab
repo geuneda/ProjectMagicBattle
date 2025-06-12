@@ -388,7 +388,7 @@ GameObject:
   - component: {fileID: 3102189232921221881}
   - component: {fileID: 6114705005908679961}
   - component: {fileID: 411997133110345512}
-  - component: {fileID: 2705067630488866960}
+  - component: {fileID: 6348087496502484563}
   m_Layer: 5
   m_Name: SkillSlot
   m_TagString: Untagged
@@ -502,7 +502,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &2705067630488866960
+--- !u!114 &6348087496502484563
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -511,7 +511,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2957790659542386723}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 05d6aacaa28854d57859e8c149573477, type: 3}
+  m_Script: {fileID: 11500000, guid: fa4f121024f734d0fb24672ae8815083, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   slotButton: {fileID: 411997133110345512}
@@ -521,7 +521,7 @@ MonoBehaviour:
   synthesisText: {fileID: 2665200805887518764}
   synthesisArrow: {fileID: 4794869333554859336}
   cooldownSlider: {fileID: 6561787616090987837}
-  disabledColor: {r: 0.26415092, g: 0.2629049, b: 0.2629049, a: 1}
+  disabledColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.8}
   enabledColor: {r: 1, g: 1, b: 1, a: 1}
   synthesisReadyColor: {r: 0, g: 1, b: 0, a: 1}
   synthesisTextDisabledColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
@@ -533,7 +533,7 @@ MonoBehaviour:
   thunderColor: {r: 1, g: 1, b: 0.3, a: 1}
   pulseScale: 1.2
   pulseDuration: 0.3
-  cooldownSliderColor: {r: 0.40392157, g: 0.40392157, b: 0.40392157, a: 0.83137256}
+  cooldownSliderColor: {r: 1, g: 1, b: 1, a: 0.8}
 --- !u!1 &3098645235118644712
 GameObject:
   m_ObjectHideFlags: 0

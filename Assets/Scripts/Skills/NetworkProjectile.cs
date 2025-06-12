@@ -75,23 +75,35 @@ namespace MagicBattle.Skills
         /// <summary>
         /// 투사체 초기화
         /// </summary>
+        /// <param name="originalSkillData">원본 스킬 데이터</param>
+        /// <param name="enhancedSkillData">강화된 스킬 데이터</param>
+        /// <param name="owner">발사한 플레이어</param>
+        public void Initialize(SkillData originalSkillData, SkillData enhancedSkillData, NetworkPlayer owner)
+        {
+            if (!Object.HasStateAuthority) return;
+            
+            // 강화된 스킬 데이터의 능력치 사용
+            Damage = enhancedSkillData.damage;
+            Speed = enhancedSkillData.projectileSpeed;
+            Range = enhancedSkillData.range;
+            Attribute = originalSkillData.attribute; // 원본의 속성 사용
+            Owner = owner;
+            
+            HasPiercing = enhancedSkillData.hasPiercing;
+            HasAreaDamage = enhancedSkillData.hasAreaDamage;
+            AreaRadius = enhancedSkillData.areaRadius;
+            
+            Debug.Log($"투사체 초기화 완료 - {originalSkillData.DisplayName}");
+        }
+
+        /// <summary>
+        /// 투사체 초기화 (오버로드 - 기존 호환성)
+        /// </summary>
         /// <param name="skillData">스킬 데이터</param>
         /// <param name="owner">발사한 플레이어</param>
         public void Initialize(SkillData skillData, NetworkPlayer owner)
         {
-            if (!Object.HasStateAuthority) return;
-            
-            Damage = skillData.damage;
-            Speed = skillData.projectileSpeed;
-            Range = skillData.range;
-            Attribute = skillData.attribute;
-            Owner = owner;
-            
-            HasPiercing = skillData.hasPiercing;
-            HasAreaDamage = skillData.hasAreaDamage;
-            AreaRadius = skillData.areaRadius;
-            
-            Debug.Log($"투사체 초기화 완료 - {skillData.DisplayName}");
+            Initialize(skillData, skillData, owner);
         }
 
         /// <summary>
