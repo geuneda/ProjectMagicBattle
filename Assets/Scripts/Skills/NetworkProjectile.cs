@@ -55,12 +55,13 @@ namespace MagicBattle.Skills
         {
             if (!isInitialized) return;
             
-            // 호스트만 투사체 이동 및 충돌 처리
+            // 호스트만 투사체 이동 및 범위 체크
             if (Object.HasStateAuthority)
             {
                 UpdateMovement();
-                CheckCollisions();
                 CheckRange();
+                // 충돌 감지는 OnTriggerEnter2D에서 주로 처리하고, 보조적으로만 사용
+                CheckCollisionsBackup();
             }
         }
 
@@ -151,12 +152,34 @@ namespace MagicBattle.Skills
         #region Collision & Damage
 
         /// <summary>
-        /// 충돌 감지 및 처리
+        /// 트리거 충돌 감지 (주요 충돌 감지 방법)
         /// </summary>
-        private void CheckCollisions()
+        /// <param name="other">충돌한 콜라이더</param>
+        private void OnTriggerEnter2D(Collider2D other)
         {
-            // 구체 충돌 검사로 몬스터 찾기
-            Collider2D[] colliders = Physics2D.OverlapCircleAll(transform.position, 0.5f);
+            // StateAuthority가 있는 클라이언트에서만 충돌 처리
+            if (!Object.HasStateAuthority) return;
+            
+            var monster = other.GetComponent<NetworkMonster>();
+            if (monster != null && !hitMonsters.Contains(monster))
+            {
+                HitMonster(monster);
+                
+                // 관통이 아니면 투사체 제거
+                if (!HasPiercing)
+                {
+                    DestroyProjectile();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 백업 충돌 감지 (OnTriggerEnter2D가 놓친 경우를 위한 보조)
+        /// </summary>
+        private void CheckCollisionsBackup()
+        {
+            // 구체 충돌 검사로 몬스터 찾기 (보조적으로만 사용)
+            Collider2D[] colliders = Physics2D.OverlapCircleAll(transform.position, 0.3f);
             
             foreach (var collider in colliders)
             {
@@ -189,7 +212,7 @@ namespace MagicBattle.Skills
             // 몬스터에게 데미지 적용
             monster.TakeDamageRPC(Damage, Owner);
             
-            Debug.Log($"투사체가 몬스터에게 적중! 데미지: {Damage}");
+            Debug.Log($"투사체가 몬스터에게 적중! 데미지: {Damage}, 몬스터 ID: {monster.Object.Id}");
             
             // 범위 데미지 처리
             if (HasAreaDamage && AreaRadius > 0f)
@@ -248,27 +271,6 @@ namespace MagicBattle.Skills
             if (Object.HasStateAuthority)
             {
                 Runner.Despawn(Object);
-            }
-        }
-
-        /// <summary>
-        /// Unity 충돌 감지 (백업용)
-        /// </summary>
-        /// <param name="other">충돌한 콜라이더</param>
-        private void OnTriggerEnter2D(Collider2D other)
-        {
-            // 호스트만 처리
-            if (!Object.HasStateAuthority) return;
-            
-            var monster = other.GetComponent<NetworkMonster>();
-            if (monster != null && !hitMonsters.Contains(monster))
-            {
-                HitMonster(monster);
-                
-                if (!HasPiercing)
-                {
-                    DestroyProjectile();
-                }
             }
         }
 

@@ -79,18 +79,37 @@ namespace MagicBattle.UI
         private void FindLocalPlayer()
         {
             var allPlayers = FindObjectsOfType<NetworkPlayer>();
+            Debug.Log($"🔍 GameUI - 전체 플레이어 수: {allPlayers.Length}");
+            
             foreach (var player in allPlayers)
             {
+                Debug.Log($"  - Player {player.PlayerId}: IsLocalPlayer={player.IsLocalPlayer}, HasInputAuthority={player.Object.HasInputAuthority}");
+                
                 if (player.IsLocalPlayer)
                 {
                     localPlayer = player;
+                    Debug.Log($"✅ 로컬 플레이어 찾음: Player {player.PlayerId}");
                     break;
                 }
             }
             
             if (localPlayer == null)
             {
-                Debug.LogWarning("로컬 플레이어를 찾을 수 없습니다.");
+                Debug.LogWarning("❌ 로컬 플레이어를 찾을 수 없습니다.");
+                // 재시도 로직 추가
+                Invoke(nameof(RetryFindLocalPlayer), 1f);
+            }
+        }
+        
+        /// <summary>
+        /// 로컬 플레이어 찾기 재시도
+        /// </summary>
+        private void RetryFindLocalPlayer()
+        {
+            if (localPlayer == null)
+            {
+                Debug.Log("🔄 로컬 플레이어 찾기 재시도...");
+                FindLocalPlayer();
             }
         }
 
@@ -267,16 +286,27 @@ namespace MagicBattle.UI
         #region Button Handlers
 
         /// <summary>
-        /// 뽑기 버튼 클릭 처리 (임시로 골드 추가)
+        /// 뽑기 버튼 클릭 처리
         /// </summary>
         private void OnGachaButtonClicked()
         {
             if (localPlayer != null && localPlayer.Gold >= 50)
             {
-                // 임시로 골드만 차감하고 골드 추가
-                localPlayer.AddGold(-50);
-                localPlayer.AddGold(10); // 몬스터 처치 시뮬레이션
-                Debug.Log("뽑기 버튼 클릭! (임시 구현)");
+                // NetworkPlayerSkillSystem을 통해 뽑기 실행
+                var skillSystem = localPlayer.GetComponent<NetworkPlayerSkillSystem>();
+                if (skillSystem != null)
+                {
+                    skillSystem.TryGacha();
+                    Debug.Log("🎲 뽑기 버튼 클릭!");
+                }
+                else
+                {
+                    Debug.LogWarning("NetworkPlayerSkillSystem을 찾을 수 없습니다.");
+                }
+            }
+            else
+            {
+                Debug.Log("골드가 부족합니다!");
             }
         }
 

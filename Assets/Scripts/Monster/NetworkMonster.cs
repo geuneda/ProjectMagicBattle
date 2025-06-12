@@ -134,14 +134,14 @@ namespace MagicBattle.Monster
         /// </summary>
         private void FindTargetPlayer()
         {
-            // 가장 가까운 살아있는 플레이어를 찾음
-            NetworkPlayer closestPlayer = null;
-            float closestDistance = float.MaxValue;
+            // 같은 X축에 있는 플레이어를 찾음 (가장 가까운 X축)
+            NetworkPlayer targetPlayer = null;
+            float minXDistance = float.MaxValue;
             
             var networkManager = FindFirstObjectByType<NetworkManager>();
             if (networkManager == null) return;
             
-            // 모든 활성 플레이어 중에서 가장 가까운 플레이어 찾기
+            // 모든 활성 플레이어 중에서 X축이 가장 가까운 플레이어 찾기
             foreach (var playerRef in Runner.ActivePlayers)
             {
                 if (Runner.TryGetPlayerObject(playerRef, out var playerObject))
@@ -149,21 +149,23 @@ namespace MagicBattle.Monster
                     var networkPlayer = playerObject.GetComponent<NetworkPlayer>();
                     if (networkPlayer != null && !networkPlayer.IsDead)
                     {
-                        float distance = Vector3.Distance(transform.position, networkPlayer.transform.position);
-                        if (distance < closestDistance)
+                        // X축 거리만 계산 (Y축은 무시)
+                        float xDistance = Mathf.Abs(transform.position.x - networkPlayer.transform.position.x);
+                        
+                        if (xDistance < minXDistance)
                         {
-                            closestDistance = distance;
-                            closestPlayer = networkPlayer;
+                            minXDistance = xDistance;
+                            targetPlayer = networkPlayer;
                         }
                     }
                 }
             }
             
-            TargetPlayer = closestPlayer;
+            TargetPlayer = targetPlayer;
             if (TargetPlayer != null)
             {
-                TargetPosition = TargetPlayer.transform.position;
-                Debug.Log($"몬스터 타겟 설정: {TargetPlayer.name}");
+                TargetPosition = new Vector3(transform.position.x, TargetPlayer.transform.position.y, 0f);
+                Debug.Log($"몬스터 타겟 설정: {TargetPlayer.name} (X축 거리: {minXDistance:F2})");
             }
         }
 
@@ -172,7 +174,7 @@ namespace MagicBattle.Monster
         #region Movement & Combat
 
         /// <summary>
-        /// 이동 로직 업데이트
+        /// 이동 로직 업데이트 (아래에서 위로만 이동)
         /// </summary>
         private void UpdateMovement()
         {
@@ -183,21 +185,25 @@ namespace MagicBattle.Monster
                 return;
             }
             
-            // 타겟 위치 업데이트
-            TargetPosition = TargetPlayer.transform.position;
+            // 타겟 위치 업데이트 (같은 X축 유지)
+            TargetPosition = new Vector3(transform.position.x, TargetPlayer.transform.position.y, 0f);
             
-            // 타겟을 향해 이동
-            Vector3 direction = (TargetPosition - transform.position).normalized;
+            // 위로만 이동 (Y축만 증가)
+            Vector3 direction = Vector3.up; // 항상 위쪽으로만 이동
             Vector3 newPosition = transform.position + direction * MoveSpeed * Runner.DeltaTime;
             
             // Transform으로 직접 이동 (NetworkTransform이 동기화 처리)
             transform.position = newPosition;
             
-            // 이동 방향으로 스프라이트 회전 (선택사항)
-            if (spriteRenderer != null && direction != Vector3.zero)
+            // 몬스터가 플레이어보다 위로 올라가면 제거
+            if (transform.position.y > TargetPlayer.transform.position.y + 2f)
             {
-                float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-                visualTransform.rotation = Quaternion.AngleAxis(angle - 90f, Vector3.forward);
+                // 플레이어를 지나쳤으므로 제거
+                if (Object.HasStateAuthority)
+                {
+                    Debug.Log("몬스터가 플레이어를 지나쳐 제거됨");
+                    Runner.Despawn(Object);
+                }
             }
         }
 

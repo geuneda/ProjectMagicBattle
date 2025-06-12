@@ -69,10 +69,13 @@ namespace MagicBattle.Player
 
         public override void FixedUpdateNetwork()
         {
-            if (!isInitialized || !Object.HasInputAuthority) return;
+            if (!isInitialized) return;
             
-            // 자동 스킬 사용
-            AutoUseSkills();
+            // 자신의 플레이어만 스킬 사용 로직 실행
+            if (Object.HasInputAuthority)
+            {
+                AutoUseSkills();
+            }
         }
 
         #endregion
@@ -291,21 +294,17 @@ namespace MagicBattle.Player
         /// </summary>
         private void AutoUseSkills()
         {
-            // 게임이 진행 중이 아니면 스킬 사용하지 않음
-            if (NetworkGameManager.Instance == null || !NetworkGameManager.Instance.IsGamePlaying)
-                return;
-            
-            // 사용 가능한 스킬 찾기
-            for (int attempts = 0; attempts < ActiveSkillIds.Length; attempts++)
+            // 활성 스킬 슬롯을 순회하며 사용 가능한 스킬 찾기
+            for (int i = 0; i < ActiveSkillIds.Length; i++)
             {
-                int currentIndex = (NextSkillIndex + attempts) % ActiveSkillIds.Length;
-                string skillId = ActiveSkillIds[currentIndex].ToString();
+                string skillId = ActiveSkillIds[i].ToString();
+                if (string.IsNullOrEmpty(skillId)) continue;
                 
-                if (!string.IsNullOrEmpty(skillId) && CanUseSkill(currentIndex))
+                if (CanUseSkill(i))
                 {
-                    UseSkill(currentIndex, skillId);
-                    NextSkillIndex = (currentIndex + 1) % ActiveSkillIds.Length;
-                    break;
+                    // RPC를 통해 스킬 사용을 모든 클라이언트에 전파
+                    UseSkillRPC(skillId, i);
+                    break; // 한 번에 하나씩만 사용
                 }
             }
         }
@@ -321,22 +320,40 @@ namespace MagicBattle.Player
         }
 
         /// <summary>
-        /// 스킬 사용
+        /// 스킬 사용 RPC (모든 클라이언트에서 실행)
         /// </summary>
-        /// <param name="skillSlotIndex">스킬 슬롯 인덱스</param>
-        /// <param name="skillId">스킬 ID</param>
+        [Rpc(RpcSources.InputAuthority, RpcTargets.All)]
+        private void UseSkillRPC(NetworkString<_32> skillId, int skillSlotIndex)
+        {
+            // 쿨다운 설정 (InputAuthority에서만)
+            if (Object.HasInputAuthority)
+            {
+                var skillData = GetSkillData(skillId.ToString());
+                if (skillData != null)
+                {
+                    SkillCooldowns.Set(skillSlotIndex, TickTimer.CreateFromSeconds(Runner, skillData.cooldown));
+                }
+            }
+            
+            // 투사체 발사 (모든 클라이언트에서 시각적으로 실행)
+            UseSkill(skillSlotIndex, skillId.ToString());
+        }
+
+        /// <summary>
+        /// 스킬 사용 (시각적 효과 및 투사체 생성)
+        /// </summary>
         private void UseSkill(int skillSlotIndex, string skillId)
         {
             var skillData = GetSkillData(skillId);
             if (skillData == null) return;
             
-            // 투사체 발사
-            FireProjectile(skillData);
+            Debug.Log($"플레이어 {networkPlayer.PlayerId}가 {skillData.DisplayName} 스킬 사용!");
             
-            // 쿨다운 설정
-            SkillCooldowns.Set(skillSlotIndex, TickTimer.CreateFromSeconds(Runner, skillData.cooldown));
-            
-            Debug.Log($"스킬 사용: {skillData.DisplayName} (쿨다운: {skillData.cooldown}초)");
+            // 투사체 발사 (StateAuthority가 있는 클라이언트에서만 실제 생성)
+            if (Object.HasStateAuthority || Object.HasInputAuthority)
+            {
+                FireProjectile(skillData);
+            }
         }
 
         /// <summary>
@@ -348,9 +365,25 @@ namespace MagicBattle.Player
             // 플레이어 위치에서 발사
             Vector3 firePosition = transform.position;
             
-            // 투사체 스폰
+            // 스킬 데이터에서 투사체 프리팹 가져오기
+            var prefabToUse = skillData.projectilePrefab;
+            if (prefabToUse == null)
+            {
+                Debug.LogWarning($"스킬 {skillData.DisplayName}에 투사체 프리팹이 설정되지 않았습니다!");
+                return;
+            }
+            
+            // NetworkObject 컴포넌트가 있는지 확인
+            var networkObject = prefabToUse.GetComponent<NetworkObject>();
+            if (networkObject == null)
+            {
+                Debug.LogError($"스킬 {skillData.DisplayName}의 투사체 프리팹에 NetworkObject 컴포넌트가 없습니다!");
+                return;
+            }
+            
+            // 투사체 스폰 (NetworkObject를 직접 스폰)
             var projectileObject = Runner.Spawn(
-                projectilePrefab,
+                networkObject,
                 firePosition,
                 Quaternion.identity,
                 Object.InputAuthority
@@ -362,6 +395,7 @@ namespace MagicBattle.Player
                 if (projectile != null)
                 {
                     projectile.Initialize(skillData, networkPlayer);
+                    Debug.Log($"🚀 투사체 발사: {skillData.DisplayName}");
                 }
             }
         }
