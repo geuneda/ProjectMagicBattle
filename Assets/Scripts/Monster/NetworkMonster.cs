@@ -17,7 +17,7 @@ namespace MagicBattle.Monster
         [Networked] public float MaxHealth { get; set; } = 100f;
         [Networked] public float MoveSpeed { get; set; } = 2f;
         [Networked] public float AttackDamage { get; set; } = 20f;
-        [Networked] public int GoldReward { get; set; } = 10;
+        [Networked] public int GoldReward { get; set; } = 30;
         [Networked] public MonsterState CurrentState { get; set; } = MonsterState.Moving;
         
         [Header("Target Settings")]
@@ -178,32 +178,43 @@ namespace MagicBattle.Monster
         /// </summary>
         private void UpdateMovement()
         {
-            // 타겟이 없거나 죽었으면 새로 찾기
-            if (TargetPlayer == null || TargetPlayer.IsDead)
+            // 네트워크 객체 유효성 검사 (fusion2physics 규칙)
+            if (!Object.IsValid || !isInitialized) return;
+            
+            try
             {
-                FindTargetPlayer();
-                return;
-            }
-            
-            // 타겟 위치 업데이트 (같은 X축 유지)
-            TargetPosition = new Vector3(transform.position.x, TargetPlayer.transform.position.y, 0f);
-            
-            // 위로만 이동 (Y축만 증가)
-            Vector3 direction = Vector3.up; // 항상 위쪽으로만 이동
-            Vector3 newPosition = transform.position + direction * MoveSpeed * Runner.DeltaTime;
-            
-            // Transform으로 직접 이동 (NetworkTransform이 동기화 처리)
-            transform.position = newPosition;
-            
-            // 몬스터가 플레이어보다 위로 올라가면 제거
-            if (transform.position.y > TargetPlayer.transform.position.y + 2f)
-            {
-                // 플레이어를 지나쳤으므로 제거
-                if (Object.HasStateAuthority)
+                // 안전하게 Networked 속성 접근
+                // 타겟이 없거나 죽었으면 새로 찾기
+                if (TargetPlayer == null || TargetPlayer.IsDead)
                 {
-                    Debug.Log("몬스터가 플레이어를 지나쳐 제거됨");
-                    Runner.Despawn(Object);
+                    FindTargetPlayer();
+                    return;
                 }
+                
+                // 타겟 위치 업데이트 (같은 X축 유지)
+                TargetPosition = new Vector3(transform.position.x, TargetPlayer.transform.position.y, 0f);
+                
+                // 위로만 이동 (Y축만 증가)
+                Vector3 direction = Vector3.up; // 항상 위쪽으로만 이동
+                Vector3 newPosition = transform.position + direction * MoveSpeed * Runner.DeltaTime;
+                
+                // Transform으로 직접 이동 (NetworkTransform이 동기화 처리)
+                transform.position = newPosition;
+                
+                // 몬스터가 플레이어보다 위로 올라가면 제거
+                if (transform.position.y > TargetPlayer.transform.position.y + 2f)
+                {
+                    // 플레이어를 지나쳤으므로 제거
+                    if (Object.HasStateAuthority)
+                    {
+                        Debug.Log("몬스터가 플레이어를 지나쳐 제거됨");
+                        Runner.Despawn(Object);
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"UpdateMovement 처리 중 오류 발생: {ex.Message}");
             }
         }
 
@@ -212,14 +223,25 @@ namespace MagicBattle.Monster
         /// </summary>
         private void CheckAttackRange()
         {
-            if (TargetPlayer == null) return;
+            // 네트워크 객체 유효성 검사 (fusion2physics 규칙)
+            if (!Object.IsValid || !isInitialized) return;
             
-            float distanceToTarget = Vector3.Distance(transform.position, TargetPlayer.transform.position);
-            
-            if (distanceToTarget <= attackRange)
+            try
             {
-                CurrentState = MonsterState.Attacking;
-                AttackTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
+                // 안전하게 Networked 속성 접근
+                if (TargetPlayer == null) return;
+                
+                float distanceToTarget = Vector3.Distance(transform.position, TargetPlayer.transform.position);
+                
+                if (distanceToTarget <= attackRange)
+                {
+                    CurrentState = MonsterState.Attacking;
+                    AttackTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"CheckAttackRange 처리 중 오류 발생: {ex.Message}");
             }
         }
 
@@ -228,26 +250,37 @@ namespace MagicBattle.Monster
         /// </summary>
         private void UpdateAttack()
         {
-            // 타겟이 없거나 죽었으면 이동 상태로 복귀
-            if (TargetPlayer == null || TargetPlayer.IsDead)
-            {
-                CurrentState = MonsterState.Moving;
-                return;
-            }
+            // 네트워크 객체 유효성 검사 (fusion2physics 규칙)
+            if (!Object.IsValid || !isInitialized) return;
             
-            // 타겟이 공격 범위를 벗어났으면 이동 상태로 복귀
-            float distanceToTarget = Vector3.Distance(transform.position, TargetPlayer.transform.position);
-            if (distanceToTarget > attackRange)
+            try
             {
-                CurrentState = MonsterState.Moving;
-                return;
+                // 안전하게 Networked 속성 접근
+                // 타겟이 없거나 죽었으면 이동 상태로 복귀
+                if (TargetPlayer == null || TargetPlayer.IsDead)
+                {
+                    CurrentState = MonsterState.Moving;
+                    return;
+                }
+                
+                // 타겟이 공격 범위를 벗어났으면 이동 상태로 복귀
+                float distanceToTarget = Vector3.Distance(transform.position, TargetPlayer.transform.position);
+                if (distanceToTarget > attackRange)
+                {
+                    CurrentState = MonsterState.Moving;
+                    return;
+                }
+                
+                // 공격 쿨다운 확인
+                if (AttackTimer.ExpiredOrNotRunning(Runner))
+                {
+                    PerformAttackRPC();
+                    AttackTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
+                }
             }
-            
-            // 공격 쿨다운 확인
-            if (AttackTimer.ExpiredOrNotRunning(Runner))
+            catch (System.Exception ex)
             {
-                PerformAttackRPC();
-                AttackTimer = TickTimer.CreateFromSeconds(Runner, attackCooldown);
+                Debug.LogWarning($"UpdateAttack 처리 중 오류 발생: {ex.Message}");
             }
         }
 
@@ -289,33 +322,61 @@ namespace MagicBattle.Monster
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         public void TakeDamageRPC(float damage, NetworkPlayer attacker = null)
         {
-            // 안전성 검사
+            // 네트워크 객체 유효성 검사 (fusion2physics 규칙) - 모든 Networked 속성 접근 전에 체크
             if (Object == null || !Object.IsValid)
             {
-                Debug.LogWarning("몬스터가 아직 Spawned되지 않아서 데미지 처리를 건너뜁니다.");
+                Debug.LogWarning("몬스터가 아직 완전히 스폰되지 않아서 데미지 처리를 건너뜁니다.");
                 return;
             }
             
-            if (!Object.HasStateAuthority || CurrentState == MonsterState.Dead) return;
-            
-            Health -= damage;
-            
-            Debug.Log($"몬스터가 {damage} 데미지를 받음. 남은 체력: {Health}");
-            
-            // 체력이 0 이하가 되면 사망
-            if (Health <= 0f)
+            // StateAuthority 체크
+            if (!Object.HasStateAuthority) 
             {
-                Die(attacker);
+                Debug.LogWarning("StateAuthority가 없어서 데미지 처리를 건너뜁니다.");
+                return;
             }
             
-            // 데미지 이벤트 발생
-            EventManager.Dispatch(GameEventType.MonsterDamageTaken, new MonsterDamageArgs
+            // 초기화 체크 (Networked 속성 접근 전에 확인)
+            if (!isInitialized) 
             {
-                Monster = this,
-                Damage = damage,
-                Attacker = attacker,
-                RemainingHealth = Health
-            });
+                Debug.LogWarning("몬스터가 아직 초기화되지 않아서 데미지 처리를 건너뜁니다.");
+                return;
+            }
+            
+            // 이제 안전하게 Networked 속성에 접근 가능
+            try
+            {
+                // 사망 상태 체크
+                if (CurrentState == MonsterState.Dead) 
+                {
+                    Debug.LogWarning("이미 사망한 몬스터에게 데미지를 시도했습니다.");
+                    return;
+                }
+                
+                // 데미지 적용
+                Health -= damage;
+                
+                Debug.Log($"몬스터가 {damage} 데미지를 받음. 남은 체력: {Health}");
+                
+                // 체력이 0 이하가 되면 사망
+                if (Health <= 0f)
+                {
+                    Die(attacker);
+                }
+                
+                // 데미지 이벤트 발생
+                EventManager.Dispatch(GameEventType.MonsterDamageTaken, new MonsterDamageArgs
+                {
+                    Monster = this,
+                    Damage = damage,
+                    Attacker = attacker,
+                    RemainingHealth = Health
+                });
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"TakeDamageRPC 처리 중 오류 발생: {ex.Message}");
+            }
         }
 
         /// <summary>

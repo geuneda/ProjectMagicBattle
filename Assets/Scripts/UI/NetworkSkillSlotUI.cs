@@ -377,10 +377,10 @@ namespace MagicBattle.UI
                 }
             }
 
-            // 합성 화살표 표시 (한 번이라도 클릭되었고 스킬을 보유한 경우에만)
+            // 합성 화살표 표시 (선택된 상태이고, 한 번이라도 클릭되었고, 스킬을 보유한 경우에만)
             if (synthesisArrow != null)
             {
-                bool shouldShowArrow = hasBeenClicked && currentSkillCount > 0;
+                bool shouldShowArrow = isSelected && hasBeenClicked && currentSkillCount > 0;
                 synthesisArrow.gameObject.SetActive(shouldShowArrow);
                 
                 if (shouldShowArrow)
@@ -542,6 +542,9 @@ namespace MagicBattle.UI
         /// </summary>
         public void HideArrowAndSynthesisText()
         {
+            // 클릭 상태 리셋
+            hasBeenClicked = false;
+            
             if (synthesisArrow != null)
             {
                 synthesisArrow.gameObject.SetActive(false);

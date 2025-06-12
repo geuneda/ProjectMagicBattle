@@ -17,7 +17,7 @@ MonoBehaviour:
   attribute: 0
   grade: 1
   skillIcon: {fileID: 21300000, guid: ae47b48841876465dac654362faae905, type: 3}
-  damage: 50
+  damage: 70
   projectileSpeed: 10
   range: 15
   cooldown: 2

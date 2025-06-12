@@ -19,14 +19,12 @@ namespace MagicBattle.Monster
         [SerializeField] private NetworkPrefabRef monsterPrefab;
         [SerializeField] private float spawnDistanceFromPlayer = 10f;
         [SerializeField] private float spawnInterval = 2f; // 양쪽에 동시 스폰하므로 간격 증가
-        [SerializeField] private int maxMonstersPerWave = 20;
-        // [SerializeField] private float spawnAreaRadius = 5f; // 더 이상 사용하지 않음 (정확한 X축 스폰)
         
         [Header("Monster Stats")]
         [SerializeField] private float baseHealth = 100f;
         [SerializeField] private float baseMoveSpeed = 2f;
         [SerializeField] private float baseAttackDamage = 20f;
-        [SerializeField] private int baseGoldReward = 10;
+        [SerializeField] private int baseGoldReward = 30;
         
         [Networked] private TickTimer SpawnTimer { get; set; }
         [Networked] private int MonstersSpawnedThisWave { get; set; } = 0;
@@ -106,10 +104,6 @@ namespace MagicBattle.Monster
             if (NetworkGameManager.Instance.CurrentWaveState != WaveState.Spawning)
                 return false;
             
-            // 이번 웨이브 최대 몬스터 수에 도달했으면 스폰하지 않음
-            if (MonstersSpawnedThisWave >= maxMonstersPerWave)
-                return false;
-            
             // 스폰 타이머 확인
             return SpawnTimer.ExpiredOrNotRunning(Runner);
         }
@@ -170,9 +164,6 @@ namespace MagicBattle.Monster
             // 모든 플레이어 아래에 동시에 몬스터 스폰
             foreach (Vector3 playerPosition in playerPositions)
             {
-                // 웨이브 최대 몬스터 수 체크
-                if (MonstersSpawnedThisWave >= maxMonstersPerWave)
-                    break;
                 
                 Vector3 spawnPosition = GetSpawnPositionAroundPlayer(playerPosition);
                 

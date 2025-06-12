@@ -12,6 +12,7 @@ namespace MagicBattle.UI
     /// 간단한 게임 UI 시스템
     /// 골드, 체력, 뽑기 버튼, 스킬 슬롯 관리
     /// 스킬 상점 기능 통합
+    /// 승부 결과 표시 기능 추가
     /// </summary>
     public class GameUI : MonoBehaviour
     {
@@ -44,6 +45,10 @@ namespace MagicBattle.UI
         [SerializeField] private TextMeshProUGUI skillOwnedCountText;
         [SerializeField] private TextMeshProUGUI skillSpecialEffectsText;
         [SerializeField] private Button closeSkillInfoButton;
+
+        [Header("Game Result UI")]
+        [SerializeField] private GameObject gameResultPanel; // 게임 결과 패널
+        [SerializeField] private TextMeshProUGUI resultTitleText; // "승리!" / "패배!"
         
         private NetworkPlayer localPlayer;
         private NetworkPlayerSkillSystem localSkillSystem;
@@ -54,6 +59,9 @@ namespace MagicBattle.UI
         private SkillData selectedSkill;
         private int purchaseCount = 0; // 뽑기 횟수
         private const int baseCost = 50; // 기본 뽑기 비용
+
+        // 게임 결과 관련
+        private bool isGameFinished = false;
 
         #region Unity Lifecycle
 
@@ -96,6 +104,9 @@ namespace MagicBattle.UI
 
             // 스킬 상점 초기화
             InitializeSkillShop();
+            
+            // 게임 결과 패널 초기화
+            InitializeGameResultPanel();
             
             isInitialized = true;
             Debug.Log("GameUI 초기화 완료");
@@ -187,6 +198,18 @@ namespace MagicBattle.UI
             EventManager.Subscribe(GameEventType.WaveChanged, OnWaveChanged);
             EventManager.Subscribe(GameEventType.GameStateChanged, OnGameStateChanged);
             EventManager.Subscribe(GameEventType.InventoryChanged, OnSkillInventoryChanged);
+            EventManager.Subscribe(GameEventType.GameOver, OnGameOver); // 게임 종료 이벤트 구독
+        }
+
+        /// <summary>
+        /// 게임 결과 패널 초기화
+        /// </summary>
+        private void InitializeGameResultPanel()
+        {
+            if (gameResultPanel != null)
+            {
+                gameResultPanel.SetActive(false);
+            }
         }
 
         /// <summary>
@@ -205,6 +228,7 @@ namespace MagicBattle.UI
             EventManager.Unsubscribe(GameEventType.WaveChanged, OnWaveChanged);
             EventManager.Unsubscribe(GameEventType.GameStateChanged, OnGameStateChanged);
             EventManager.Unsubscribe(GameEventType.InventoryChanged, OnSkillInventoryChanged);
+            EventManager.Unsubscribe(GameEventType.GameOver, OnGameOver);
         }
 
         #endregion
@@ -740,6 +764,81 @@ namespace MagicBattle.UI
             purchaseCount++;
 
             Debug.Log($"뽑기 요청 전송됨. 비용: {cost}");
+        }
+
+        /// <summary>
+        /// 게임 종료 이벤트 처리
+        /// </summary>
+        private void OnGameOver(object args)
+        {
+            if (args is GameOverArgs gameOverArgs)
+            {
+                ShowGameResult(gameOverArgs);
+            }
+        }
+
+        /// <summary>
+        /// 게임 결과 표시
+        /// </summary>
+        /// <param name="result">게임 결과 정보</param>
+        private void ShowGameResult(GameOverArgs result)
+        {
+            if (localPlayer == null) return;
+
+            isGameFinished = true;
+            bool isWinner = localPlayer.PlayerId == result.WinnerPlayerId;
+
+            // 게임 결과 패널 활성화
+            if (gameResultPanel != null)
+            {
+                gameResultPanel.SetActive(true);
+            }
+
+            // 승리/패배 타이틀 설정
+            if (resultTitleText != null)
+            {
+                resultTitleText.text = isWinner ? "승리!" : "패배!";
+                resultTitleText.color = isWinner ? Color.yellow : Color.red;
+            }
+        }
+
+        /// <summary>
+        /// 다시하기 버튼 클릭 이벤트
+        /// </summary>
+        private void OnPlayAgainClicked()
+        {
+            Debug.Log("🔄 다시하기 버튼 클릭");
+
+            // 게임 재시작 요청
+            if (NetworkGameManager.Instance != null)
+            {
+                NetworkGameManager.Instance.RestartGameRPC();
+            }
+        }
+
+        /// <summary>
+        /// 나가기 버튼 클릭 이벤트
+        /// </summary>
+        private void OnQuitClicked()
+        {
+            Debug.Log("🚪 나가기 버튼 클릭");
+
+            // 애플리케이션 종료 또는 메인 메뉴로 이동
+            Application.Quit();
+
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#endif
+        }
+
+        /// <summary>
+        /// 승리/패배 사운드 재생
+        /// </summary>
+        /// <param name="isWinner">승리 여부</param>
+        private void PlayResultSound(bool isWinner)
+        {
+            // TODO: 오디오 매니저를 통한 사운드 재생
+            // AudioManager.PlaySFX(isWinner ? "victory" : "defeat");
         }
 
         #endregion

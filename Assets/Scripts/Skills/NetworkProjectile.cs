@@ -63,8 +63,6 @@ namespace MagicBattle.Skills
             {
                 UpdateMovement();
                 CheckRange();
-                // 충돌 감지는 OnTriggerEnter2D에서 주로 처리하고, 보조적으로만 사용
-                CheckCollisionsBackup();
             }
         }
 
@@ -175,6 +173,13 @@ namespace MagicBattle.Skills
             // StateAuthority가 있는 클라이언트에서만 충돌 처리
             if (!Object.HasStateAuthority) return;
             
+            // other 콜라이더 null 체크
+            if (other == null) 
+            {
+                Debug.LogWarning("충돌한 콜라이더가 null입니다.");
+                return;
+            }
+            
             var monster = other.GetComponent<NetworkMonster>();
             if (monster != null && !hitMonsters.Contains(monster))
             {
@@ -189,37 +194,6 @@ namespace MagicBattle.Skills
         }
 
         /// <summary>
-        /// 백업 충돌 감지 (OnTriggerEnter2D가 놓친 경우를 위한 보조)
-        /// </summary>
-        private void CheckCollisionsBackup()
-        {
-            // 구체 충돌 검사로 몬스터 찾기 (보조적으로만 사용)
-            Collider2D[] colliders = Physics2D.OverlapCircleAll(transform.position, 0.3f);
-            
-            foreach (var collider in colliders)
-            {
-                var monster = collider.GetComponent<NetworkMonster>();
-                if (monster != null && !hitMonsters.Contains(monster))
-                {
-                    // 몬스터가 아직 Spawned되지 않았으면 스킵
-                    if (monster.Object == null || !monster.Object.IsValid)
-                    {
-                        continue;
-                    }
-                    
-                    HitMonster(monster);
-                    
-                    // 관통이 아니면 투사체 제거
-                    if (!HasPiercing)
-                    {
-                        DestroyProjectile();
-                        return;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
         /// 몬스터 타격 처리
         /// </summary>
         /// <param name="monster">타격당한 몬스터</param>
@@ -228,10 +202,10 @@ namespace MagicBattle.Skills
             // 몬스터가 null이거나 이미 맞은 몬스터는 스킵
             if (monster == null || hitMonsters.Contains(monster)) return;
             
-            // 몬스터가 아직 Spawned되지 않았으면 스킵
+            // 몬스터가 아직 Spawned되지 않았거나 유효하지 않으면 스킵 (fusion2physics 규칙)
             if (monster.Object == null || !monster.Object.IsValid) 
             {
-                Debug.LogWarning("몬스터가 아직 Spawned되지 않아서 데미지 처리를 건너뜁니다.");
+                Debug.LogWarning("몬스터가 아직 완전히 스폰되지 않아서 데미지 처리를 건너뜁니다.");
                 return;
             }
             
@@ -239,8 +213,6 @@ namespace MagicBattle.Skills
             
             // 몬스터에게 데미지 적용
             monster.TakeDamageRPC(Damage, Owner);
-            
-            Debug.Log($"투사체가 몬스터에게 적중! 데미지: {Damage}, 몬스터 ID: {monster.Object.Id}");
             
             // 범위 데미지 처리
             if (HasAreaDamage && AreaRadius > 0f)
@@ -262,10 +234,12 @@ namespace MagicBattle.Skills
             
             foreach (var collider in areaColliders)
             {
+                if (collider == null) continue; // null 체크 추가
+                
                 var monster = collider.GetComponent<NetworkMonster>();
                 if (monster != null && !hitMonsters.Contains(monster))
                 {
-                    // 몬스터가 아직 Spawned되지 않았으면 스킵
+                    // 몬스터가 아직 Spawned되지 않았거나 유효하지 않으면 스킵 (fusion2physics 규칙)
                     if (monster.Object == null || !monster.Object.IsValid)
                     {
                         continue;

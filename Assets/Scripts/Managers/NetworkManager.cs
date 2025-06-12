@@ -923,6 +923,82 @@ namespace MagicBattle.Managers
         }
 
         /// <summary>
+        /// 로비 씬으로 복귀 (네트워크 동기화)
+        /// </summary>
+        /// <returns>성공 여부</returns>
+        public async UniTask<bool> LoadLobbySceneAsync()
+        {
+            // 씬 권한 확인 (Fusion2 규칙에 따라)
+            if (!Runner.IsSceneAuthority)
+            {
+                Debug.LogWarning("로비 씬 로드는 Scene Authority를 가진 클라이언트만 실행할 수 있습니다.");
+                return false;
+            }
+
+            if (Runner == null)
+            {
+                Debug.LogError("NetworkRunner가 초기화되지 않았습니다.");
+                return false;
+            }
+
+            try
+            {
+                Debug.Log("모든 클라이언트에 로비 씬 로드 요청...");
+                
+                // LobbyNet 씬의 빌드 인덱스 얻기
+                int lobbySceneIndex = SceneUtility.GetBuildIndexByScenePath("Assets/Scenes/LobbyNet.unity");
+                
+                if (lobbySceneIndex < 0)
+                {
+                    // 대체 방법: 씬 이름으로 찾기
+                    lobbySceneIndex = GetSceneIndexByName("LobbyNet");
+                }
+                
+                if (lobbySceneIndex < 0)
+                {
+                    Debug.LogError("LobbyNet 씬을 찾을 수 없습니다. Build Settings에 추가되어 있는지 확인하세요.");
+                    return false;
+                }
+
+                // SceneRef 생성
+                var sceneRef = SceneRef.FromIndex(lobbySceneIndex);
+
+                // Single 모드로 씬 로드 (모든 이전 씬을 언로드하고 새 씬 로드)
+                var sceneOp = Runner.LoadScene(sceneRef, LoadSceneMode.Single);
+                
+                // 비동기 대기
+                while (!sceneOp.IsDone)
+                {
+                    await UniTask.Yield();
+                }
+                
+                if (sceneOp.IsValid)
+                {
+                    Debug.Log("로비 씬 로드 성공 - 모든 클라이언트 동기화됨");
+                    return true;
+                }
+                else
+                {
+                    Debug.LogError("로비 씬 로드 실패");
+                    return false;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"로비 씬 로드 중 예외 발생: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 로비 씬으로 복귀 (동기 버전)
+        /// </summary>
+        public void LoadLobbyScene()
+        {
+            LoadLobbySceneAsync().Forget();
+        }
+
+        /// <summary>
         /// 씬 이름으로 빌드 인덱스 찾기 (대체 방법)
         /// </summary>
         /// <param name="sceneName">찾을 씬 이름</param>

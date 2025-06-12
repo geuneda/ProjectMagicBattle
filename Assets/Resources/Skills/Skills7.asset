@@ -18,10 +18,10 @@ MonoBehaviour:
   attribute: 2
   grade: 1
   skillIcon: {fileID: 21300000, guid: 592db3bb27d6f4d4889db5f6859ed1b8, type: 3}
-  damage: 50
+  damage: 65
   projectileSpeed: 10
   range: 15
-  cooldown: 2
+  cooldown: 2.5
   projectilePrefab: {fileID: 5953545495418054763, guid: 20915a37d18674cbfae8b2386bfc8ec0, type: 3}
   hitEffectPrefab: {fileID: 8771972552311404799, guid: bbf9e36a48d6c5648a13889afab076fd, type: 3}
   skillColor: {r: 1, g: 1, b: 1, a: 1}

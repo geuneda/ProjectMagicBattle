@@ -50,7 +50,7 @@ MonoBehaviour:
   _Health: 100
   _Mana: 100
   _Score: 0
-  _Gold: 1000
+  _Gold: 2000
   _State: 0
   _NetworkPosition: {x: 0, y: 0, z: 0}
   _NetworkRotation: {x: 0, y: 0, z: 0, w: 0}

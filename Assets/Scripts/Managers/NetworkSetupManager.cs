@@ -464,28 +464,67 @@ namespace MagicBattle.Managers
         {
             try
             {
+                // 스폰 전 준비 시간 (Fusion 프리팹 로딩 대기)
+                await UniTask.Delay(200);
+                
                 // NetworkGameManager 스폰
                 if (networkGameManagerPrefab.IsValid && NetworkGameManager == null)
                 {
                     Debug.Log("🎮 NetworkGameManager 스폰 시도");
-                    var gameManagerObj = runner.Spawn(networkGameManagerPrefab);
-                    NetworkGameManager = gameManagerObj.GetComponent<NetworkGameManager>();
-                    spawnedObjects.Add(gameManagerObj);
-                    Debug.Log("✅ NetworkGameManager 스폰 완료");
+                    
+                    // 안전한 스폰을 위한 추가 지연
+                    await UniTask.Delay(50);
+                    
+                    try
+                    {
+                        var gameManagerObj = runner.Spawn(networkGameManagerPrefab);
+                        if (gameManagerObj != null)
+                        {
+                            NetworkGameManager = gameManagerObj.GetComponent<NetworkGameManager>();
+                            spawnedObjects.Add(gameManagerObj);
+                            Debug.Log("✅ NetworkGameManager 스폰 완료");
+                        }
+                        else
+                        {
+                            Debug.LogError("❌ NetworkGameManager 스폰 실패: 반환된 객체가 null");
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogError($"❌ NetworkGameManager 스폰 중 오류: {ex.Message}");
+                    }
                 }
                 
                 // NetworkMonsterSpawner 스폰
                 if (networkMonsterSpawnerPrefab.IsValid && NetworkMonsterSpawner == null)
                 {
                     Debug.Log("🎮 NetworkMonsterSpawner 스폰 시도");
-                    var monsterSpawnerObj = runner.Spawn(networkMonsterSpawnerPrefab);
-                    NetworkMonsterSpawner = monsterSpawnerObj.GetComponent<NetworkMonsterSpawner>();
-                    spawnedObjects.Add(monsterSpawnerObj);
-                    Debug.Log("✅ NetworkMonsterSpawner 스폰 완료");
+                    
+                    // 안전한 스폰을 위한 추가 지연
+                    await UniTask.Delay(50);
+                    
+                    try
+                    {
+                        var monsterSpawnerObj = runner.Spawn(networkMonsterSpawnerPrefab);
+                        if (monsterSpawnerObj != null)
+                        {
+                            NetworkMonsterSpawner = monsterSpawnerObj.GetComponent<NetworkMonsterSpawner>();
+                            spawnedObjects.Add(monsterSpawnerObj);
+                            Debug.Log("✅ NetworkMonsterSpawner 스폰 완료");
+                        }
+                        else
+                        {
+                            Debug.LogError("❌ NetworkMonsterSpawner 스폰 실패: 반환된 객체가 null");
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogError($"❌ NetworkMonsterSpawner 스폰 중 오류: {ex.Message}");
+                    }
                 }
                 
-                // 게임 시작 준비 완료까지 잠시 대기
-                await UniTask.Delay(100);
+                // 게임 시작 준비 완료까지 추가 대기
+                await UniTask.Delay(200);
                 
                 IsGameRunning = true;
                 Debug.Log("🎉 게임 매니저 스폰 및 게임 시작 완료");

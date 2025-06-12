@@ -108,7 +108,7 @@ MonoBehaviour:
   _MaxHealth: 100
   _MoveSpeed: 2
   _AttackDamage: 20
-  _GoldReward: 10
+  _GoldReward: 30
   _CurrentState: 0
   _TargetPlayer: {fileID: 0}
   _TargetPosition: {x: 0, y: 0, z: 0}

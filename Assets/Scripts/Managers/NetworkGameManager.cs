@@ -26,9 +26,15 @@ namespace MagicBattle.Managers
         [Networked] public int MonstersSpawnedThisWave { get; set; } = 0;
         [Networked] public int MonstersPerWave { get; set; } = 20;
         
+        [Header("Game Result Settings")]
+        [Networked] public int WinnerPlayerId { get; set; } = -1;
+        [Networked] public int LoserPlayerId { get; set; } = -1;
+        [Networked] public bool IsGameFinished { get; set; } = false;
+        
         [Header("Settings")]
         [SerializeField] private float spawnDuration = 20f;
         [SerializeField] private float restDuration = 10f;
+        [SerializeField] private float gameOverDelay = 3f; // 게임 종료 후 결과 표시 지연 시간
         
         // 싱글톤 패턴
         public static NetworkGameManager Instance { get; private set; }
@@ -40,7 +46,7 @@ namespace MagicBattle.Managers
         
         // 웨이브 관련 설정
         public float WaveDifficultyMultiplier => 1f + (CurrentWave - 1) * 0.2f;
-        public bool IsGamePlaying => CurrentGameState == GameState.Playing;
+        public bool IsGamePlaying => CurrentGameState == GameState.Playing && !IsGameFinished;
 
         #region Unity Lifecycle & Network Lifecycle
 
@@ -96,29 +102,32 @@ namespace MagicBattle.Managers
         /// </summary>
         private void InitializeNetworkGameManager()
         {
-            // 로컬 매니저 참조 설정
-            SetupLocalManagers();
+            Debug.Log("NetworkGameManager 초기화 시작");
             
-            // 네트워크 이벤트 구독
-            SubscribeToNetworkEvents();
-            
-            // 호스트만 게임 초기화
-            if (Object.HasStateAuthority)
-            {
-                InitializeGameStateAsync().Forget();
-            }
-        }
-
-        /// <summary>
-        /// 로컬 매니저들 참조 설정
-        /// </summary>
-        private void SetupLocalManagers()
-        {
-            
+            // NetworkManager 찾기
+            networkManager = FindFirstObjectByType<NetworkManager>();
             if (networkManager == null)
             {
-                Debug.LogWarning("NetworkManager를 찾을 수 없습니다.");
+                Debug.LogError("NetworkManager를 찾을 수 없습니다!");
+                return;
             }
+            
+            // 이벤트 구독 (StateAuthority만)
+            if (Object.HasStateAuthority)
+            {
+                SubscribeToNetworkEvents();
+            }
+            
+            // 모든 클라이언트에서 구독할 이벤트들
+            SubscribeToClientEvents();
+            
+            // 게임 상태 초기화
+            if (Object.HasStateAuthority)
+            {
+                ResetGameState();
+            }
+            
+            Debug.Log($"NetworkGameManager 초기화 완료 - StateAuthority: {Object.HasStateAuthority}");
         }
 
         /// <summary>
@@ -129,19 +138,122 @@ namespace MagicBattle.Managers
             EventManager.Subscribe(GameEventType.PlayerJoined, OnPlayerJoined);
             EventManager.Subscribe(GameEventType.PlayerLeft, OnPlayerLeft);
             EventManager.Subscribe(GameEventType.MonsterKilled, OnMonsterKilled);
+            EventManager.Subscribe(GameEventType.PlayerDied, OnPlayerDied); // 플레이어 사망 이벤트 구독
+        }
+        
+        /// <summary>
+        /// 모든 클라이언트에서 구독할 이벤트들
+        /// </summary>
+        private void SubscribeToClientEvents()
+        {
+            // 모든 클라이언트에서 GameOver 이벤트 구독 (UI 표시용)
+            EventManager.Subscribe(GameEventType.GameOver, OnGameOverReceived);
         }
 
         /// <summary>
-        /// 게임 상태 초기화 (호스트만)
+        /// 플레이어 사망 이벤트 처리
         /// </summary>
-        private async UniTask InitializeGameStateAsync()
+        private void OnPlayerDied(object args)
         {
-            await UniTask.DelayFrame(1); // 네트워크 초기화 대기
+            if (!Object.HasStateAuthority || IsGameFinished) return;
             
-            // 초기 게임 상태 설정
-            ResetNetworkGameState();
+            if (args is PlayerDeathArgs deathArgs)
+            {
+                Debug.Log($"🏁 플레이어 {deathArgs.PlayerId}가 사망했습니다!");
+                
+                // 게임 종료 처리
+                HandlePlayerDeathRPC(deathArgs.PlayerId);
+            }
+        }
+        
+        /// <summary>
+        /// 게임오버 이벤트 수신 처리 (모든 클라이언트)
+        /// </summary>
+        private void OnGameOverReceived(object args)
+        {
+            if (args is GameOverArgs gameOverArgs)
+            {
+                Debug.Log($"[클라이언트] 게임 종료 이벤트 수신 - 승자: Player {gameOverArgs.WinnerPlayerId}, 패자: Player {gameOverArgs.LoserPlayerId}");
+                
+                // 클라이언트에서도 게임 종료 상태로 설정
+                if (!IsGameFinished)
+                {
+                    IsGameFinished = true;
+                    
+                    // UI에 승부 결과 표시 (이미 HandlePlayerDeathRPC에서 이벤트 발생함)
+                    Debug.Log($"[클라이언트] 게임 결과 UI 표시 준비 완료");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// 플레이어 사망 처리 및 승부 결정
+        /// </summary>
+        /// <param name="deadPlayerId">사망한 플레이어 ID</param>
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void HandlePlayerDeathRPC(int deadPlayerId)
+        {
+            Debug.Log($"🎯 [HandlePlayerDeathRPC] 호출됨 - 사망자: Player {deadPlayerId}, IsGameFinished: {IsGameFinished}");
             
-            Debug.Log("네트워크 게임 상태 초기화 완료");
+            if (IsGameFinished) 
+            {
+                Debug.Log($"⚠️ [HandlePlayerDeathRPC] 게임이 이미 종료됨 - 처리 중단");
+                return;
+            }
+            
+            // 승자 찾기 (살아있는 플레이어)
+            int winnerId = -1;
+            Debug.Log($"🔍 [HandlePlayerDeathRPC] 승자 찾기 시작...");
+            
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (Runner.TryGetPlayerObject(player, out var playerObject))
+                {
+                    var networkPlayer = playerObject.GetComponent<NetworkPlayer>();
+                    if (networkPlayer != null)
+                    {
+                        Debug.Log($"   - Player {networkPlayer.PlayerId}: IsDead={networkPlayer.IsDead}, Health={networkPlayer.Health}");
+                        
+                        if (networkPlayer.PlayerId != deadPlayerId && !networkPlayer.IsDead)
+                        {
+                            winnerId = networkPlayer.PlayerId;
+                            Debug.Log($"🏆 [HandlePlayerDeathRPC] 승자 발견: Player {winnerId}");
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (winnerId != -1)
+            {
+                Debug.Log($"🎉 [HandlePlayerDeathRPC] 게임 종료 처리 시작 - 승자: Player {winnerId}, 패자: Player {deadPlayerId}");
+                
+                // 게임 결과 설정
+                WinnerPlayerId = winnerId;
+                LoserPlayerId = deadPlayerId;
+                IsGameFinished = true;
+                
+                // 게임 상태를 게임오버로 변경
+                ChangeGameStateRPC(GameState.GameOver);
+                
+                // 게임 종료 이벤트 발생
+                var gameOverArgs = new GameOverArgs
+                {
+                    WinnerPlayerId = winnerId,
+                    LoserPlayerId = deadPlayerId,
+                    GameTime = GameTime,
+                    CurrentWave = CurrentWave
+                };
+                
+                Debug.Log($"📢 [HandlePlayerDeathRPC] GameOver 이벤트 발생 - WinnerId: {gameOverArgs.WinnerPlayerId}, LoserId: {gameOverArgs.LoserPlayerId}");
+                EventManager.Dispatch(GameEventType.GameOver, gameOverArgs);
+                
+                Debug.Log($"✅ [HandlePlayerDeathRPC] 게임 종료 처리 완료!");
+            }
+            else
+            {
+                Debug.LogError($"❌ [HandlePlayerDeathRPC] 승자를 찾을 수 없음!");
+            }
         }
 
         #endregion
@@ -151,19 +263,22 @@ namespace MagicBattle.Managers
         /// <summary>
         /// 네트워크 게임 상태 리셋
         /// </summary>
-        private void ResetNetworkGameState()
+        private void ResetGameState()
         {
-            if (!Object.HasStateAuthority) return;
-            
             CurrentGameState = GameState.Playing;
             GameTime = 0f;
-            GameSpeed = Constants.GAME_SPEED_NORMAL;
+            CurrentWave = 1;
+            CurrentWaveState = WaveState.Spawning;
+            WaveTimer = spawnDuration;
+            WaveStateTimer = 0f;
+            MonstersSpawnedThisWave = 0;
             
-            // 웨이브 시스템 리셋
-            ResetNetworkWaveSystem();
+            // 게임 결과 초기화
+            WinnerPlayerId = -1;
+            LoserPlayerId = -1;
+            IsGameFinished = false;
             
-            // 상태 변경 알림
-            NotifyGameStateChangedRPC(CurrentGameState);
+            Debug.Log("게임 상태가 초기화되었습니다.");
         }
 
         /// <summary>
@@ -257,23 +372,6 @@ namespace MagicBattle.Managers
         #region Network Wave System
 
         /// <summary>
-        /// 네트워크 웨이브 시스템 리셋
-        /// </summary>
-        private void ResetNetworkWaveSystem()
-        {
-            if (!Object.HasStateAuthority) return;
-            
-            CurrentWave = 1;
-            CurrentWaveState = WaveState.Spawning;
-            WaveTimer = spawnDuration;
-            WaveStateTimer = 0f;
-            MonstersSpawnedThisWave = 0;
-            
-            // 웨이브 상태 변경 알림
-            NotifyWaveStateChangedRPC(CurrentWaveState);
-        }
-
-        /// <summary>
         /// 네트워크 웨이브 시스템 업데이트
         /// </summary>
         private void UpdateNetworkWaveSystem()
@@ -328,10 +426,6 @@ namespace MagicBattle.Managers
         /// </summary>
         private void UpdateFightingState()
         {
-            // 모든 몬스터가 처치되었는지 확인
-            // 실제 구현에서는 MonsterManager와 연동
-            
-            // 임시: 30초 후 웨이브 완료
             if (WaveStateTimer >= 30f)
             {
                 ChangeWaveStateRPC(WaveState.Completed);
@@ -393,8 +487,7 @@ namespace MagicBattle.Managers
             EventManager.Dispatch(GameEventType.WaveChanged, new WaveChangedArgs
             {
                 NewWave = CurrentWave,
-                MonstersPerWave = MonstersPerWave,
-                DifficultyMultiplier = WaveDifficultyMultiplier
+                WaveState = CurrentWaveState
             });
         }
 
@@ -513,6 +606,23 @@ namespace MagicBattle.Managers
             StartNextWaveRPC();
         }
 
+        /// <summary>
+        /// 게임 재시작 (로비로 복귀)
+        /// </summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RestartGameRPC()
+        {
+            if (!Object.HasStateAuthority) return;
+            
+            Debug.Log("🔄 게임 재시작 - 로비로 복귀");
+            
+            // 로비 씬으로 전환
+            if (networkManager != null)
+            {
+                networkManager.LoadLobbyScene();
+            }
+        }
+
         #endregion
 
         #region Cleanup
@@ -526,6 +636,8 @@ namespace MagicBattle.Managers
             EventManager.Unsubscribe(GameEventType.PlayerJoined, OnPlayerJoined);
             EventManager.Unsubscribe(GameEventType.PlayerLeft, OnPlayerLeft);
             EventManager.Unsubscribe(GameEventType.MonsterKilled, OnMonsterKilled);
+            EventManager.Unsubscribe(GameEventType.PlayerDied, OnPlayerDied);
+            EventManager.Unsubscribe(GameEventType.GameOver, OnGameOverReceived);
         }
 
         #endregion
@@ -572,8 +684,7 @@ namespace MagicBattle.Managers
     public class WaveChangedArgs
     {
         public int NewWave;
-        public int MonstersPerWave;
-        public float DifficultyMultiplier;
+        public WaveState WaveState;
     }
 
     /// <summary>
@@ -605,6 +716,7 @@ namespace MagicBattle.Managers
     public class GameOverArgs
     {
         public int WinnerPlayerId;
+        public int LoserPlayerId;
         public float GameTime;
         public int CurrentWave;
     }

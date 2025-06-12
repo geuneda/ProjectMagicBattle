@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using MagicBattle.Managers;
 using MagicBattle.Common;
 using System.Collections.Generic;
+using DG.Tweening;
 
 namespace MagicBattle.UI
 {
@@ -57,6 +58,10 @@ namespace MagicBattle.UI
         
         // 플레이어 정보
         private string localPlayerName = "Player";
+        
+        // 진행률 슬라이더 관련
+        private Tween progressTween;
+        private bool isConnecting = false;
 
         #region Unity Lifecycle
 
@@ -74,6 +79,12 @@ namespace MagicBattle.UI
         private void OnDestroy()
         {
             UnsubscribeFromNetworkEvents();
+            
+            // DOTween 정리
+            if (progressTween != null && progressTween.IsActive())
+            {
+                progressTween.Kill();
+            }
         }
 
         #endregion
@@ -250,7 +261,7 @@ namespace MagicBattle.UI
         /// </summary>
         private async void OnCreateRoomClicked()
         {
-            if (networkManager == null) return;
+            if (networkManager == null || isConnecting) return;
             
             string roomName = roomNameInput?.text;
             if (string.IsNullOrEmpty(roomName))
@@ -258,16 +269,29 @@ namespace MagicBattle.UI
                 roomName = $"Room_{Random.Range(1000, 9999)}";
             }
             
+            isConnecting = true;
             ChangeState(LobbyState.Connecting);
             UpdateConnectionStatus($"방 '{roomName}' 생성 중...");
             
+            // 연결 단계별 진행률 애니메이션 시작
+            await StartConnectionProgressAnimation();
+            
             bool success = await networkManager.StartHostAsync(roomName);
             
-            if (!success)
+            if (success)
             {
+                // 성공 시 100%로 채우고 잠깐 대기 후 입장
+                await CompleteConnectionProgress();
+            }
+            else
+            {
+                // 실패 시 진행률 리셋
+                await ResetConnectionProgress();
                 ChangeState(LobbyState.MainMenu);
                 UpdateConnectionStatus("방 생성에 실패했습니다.");
             }
+            
+            isConnecting = false;
         }
 
         /// <summary>
@@ -275,7 +299,7 @@ namespace MagicBattle.UI
         /// </summary>
         private async void OnJoinRandomRoomClicked()
         {
-            if (networkManager == null) return;
+            if (networkManager == null || isConnecting) return;
             
             // 임시로 방 이름 입력받아 참가 (실제로는 방 목록에서 선택)
             string roomName = roomNameInput?.text;
@@ -285,16 +309,29 @@ namespace MagicBattle.UI
                 return;
             }
             
+            isConnecting = true;
             ChangeState(LobbyState.Connecting);
             UpdateConnectionStatus($"방 '{roomName}'에 참가 중...");
             
+            // 연결 단계별 진행률 애니메이션 시작
+            await StartConnectionProgressAnimation();
+            
             bool success = await networkManager.JoinSessionAsync(roomName);
             
-            if (!success)
+            if (success)
             {
+                // 성공 시 100%로 채우고 잠깐 대기 후 입장
+                await CompleteConnectionProgress();
+            }
+            else
+            {
+                // 실패 시 진행률 리셋
+                await ResetConnectionProgress();
                 ChangeState(LobbyState.MainMenu);
                 UpdateConnectionStatus("방 참가에 실패했습니다.");
             }
+            
+            isConnecting = false;
         }
 
         /// <summary>
@@ -348,9 +385,18 @@ namespace MagicBattle.UI
         {
             if (networkManager == null) return;
             
+            // 진행률 애니메이션 중단 및 리셋
+            if (progressTween != null && progressTween.IsActive())
+            {
+                progressTween.Kill();
+            }
+            await ResetConnectionProgress();
+            
             await networkManager.LeaveSessionAsync();
             ChangeState(LobbyState.MainMenu);
             UpdateConnectionStatus("연결이 취소되었습니다.");
+            
+            isConnecting = false;
         }
 
         /// <summary>
@@ -631,6 +677,103 @@ namespace MagicBattle.UI
             // 실제 구현에서는 Photon의 방 목록 API를 사용
             // 현재는 기본 구현만 제공
             UpdateConnectionStatus("방 목록을 새로고침했습니다.");
+        }
+
+        #endregion
+
+        #region Connection Progress Animation
+
+        /// <summary>
+        /// 연결 진행률 애니메이션 시작 (70%까지 단계별로)
+        /// </summary>
+        private async UniTask StartConnectionProgressAnimation()
+        {
+            if (connectionProgressSlider == null) return;
+
+            // 초기화
+            connectionProgressSlider.value = 0f;
+
+            // 단계별 진행률 애니메이션
+            await UpdateProgressSlider(0.2f, 0.3f, "네트워크 초기화 중...");
+            await UniTask.Delay(200);
+            
+            await UpdateProgressSlider(0.4f, 0.4f, "서버 연결 중...");
+            await UniTask.Delay(300);
+            
+            await UpdateProgressSlider(0.7f, 0.5f, "세션 설정 중...");
+            
+            Debug.Log("[LobbyUI] 연결 진행률 70% 완료");
+        }
+
+        /// <summary>
+        /// 연결 완료 (100%까지 채우고 0.5초 대기 후 입장)
+        /// </summary>
+        private async UniTask CompleteConnectionProgress()
+        {
+            if (connectionProgressSlider == null) return;
+
+            // 70%에서 100%로 빠르게 채우기
+            await UpdateProgressSlider(1.0f, 0.3f, "연결 완료!");
+            
+            // 0.5초 대기 (사용자가 완료를 인식할 시간)
+            await UniTask.Delay(500);
+            
+            Debug.Log("[LobbyUI] 연결 완료 - 입장 처리");
+        }
+
+        /// <summary>
+        /// 연결 실패 시 진행률 리셋
+        /// </summary>
+        private async UniTask ResetConnectionProgress()
+        {
+            if (connectionProgressSlider == null) return;
+
+            // 진행률을 0으로 리셋
+            await UpdateProgressSlider(0f, 0.2f, "연결 실패");
+            
+            Debug.Log("[LobbyUI] 연결 진행률 리셋 완료");
+        }
+
+        /// <summary>
+        /// 진행률 슬라이더 부드러운 업데이트
+        /// </summary>
+        /// <param name="targetProgress">목표 진행률 (0~1)</param>
+        /// <param name="duration">애니메이션 지속 시간</param>
+        /// <param name="statusMessage">상태 메시지 (옵션)</param>
+        private async UniTask UpdateProgressSlider(float targetProgress, float duration, string statusMessage = null)
+        {
+            if (connectionProgressSlider == null) return;
+
+            // 상태 메시지 업데이트
+            if (!string.IsNullOrEmpty(statusMessage))
+            {
+                UpdateConnectionStatus(statusMessage);
+            }
+
+            // 기존 트윈 정리
+            if (progressTween != null && progressTween.IsActive())
+            {
+                progressTween.Kill();
+            }
+
+            // 현재 값에서 목표 값까지 부드럽게 애니메이션
+            float startValue = connectionProgressSlider.value;
+            
+            // UniTaskCompletionSource를 사용하여 애니메이션 완료 대기
+            var completionSource = new UniTaskCompletionSource();
+            
+            progressTween = DOTween.To(
+                () => startValue,
+                value => connectionProgressSlider.value = value,
+                targetProgress,
+                duration
+            ).SetEase(Ease.OutQuart)
+            .OnComplete(() => completionSource.TrySetResult());
+
+            // 애니메이션 완료까지 대기
+            await completionSource.Task;
+            
+            Debug.Log($"[LobbyUI] 진행률 업데이트: {targetProgress * 100:F0}% - {statusMessage}");
         }
 
         #endregion
