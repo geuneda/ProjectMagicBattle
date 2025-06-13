@@ -155,14 +155,24 @@ namespace MagicBattle.Managers
         /// </summary>
         private void OnPlayerDied(object args)
         {
-            if (!Object.HasStateAuthority || IsGameFinished) return;
+            Debug.Log($"💀 [NetworkGameManager] OnPlayerDied 이벤트 수신 - HasStateAuthority: {Object.HasStateAuthority}, IsGameFinished: {IsGameFinished}");
+            
+            if (!Object.HasStateAuthority || IsGameFinished) 
+            {
+                Debug.Log($"⚠️ [NetworkGameManager] 플레이어 사망 처리 건너뜀 - StateAuthority: {Object.HasStateAuthority}, GameFinished: {IsGameFinished}");
+                return;
+            }
             
             if (args is PlayerDeathArgs deathArgs)
             {
-                Debug.Log($"🏁 플레이어 {deathArgs.PlayerId}가 사망했습니다!");
+                Debug.Log($"🏁 [NetworkGameManager] 플레이어 {deathArgs.PlayerId}가 사망했습니다! 게임 종료 처리 시작");
                 
                 // 게임 종료 처리
                 HandlePlayerDeathRPC(deathArgs.PlayerId);
+            }
+            else
+            {
+                Debug.LogError($"❌ [NetworkGameManager] PlayerDeathArgs 타입 변환 실패 - args 타입: {args?.GetType()}");
             }
         }
         
@@ -187,10 +197,10 @@ namespace MagicBattle.Managers
         }
         
         /// <summary>
-        /// 플레이어 사망 처리 및 승부 결정
+        /// 플레이어 사망 처리 및 승부 결정 (호스트만 실행)
         /// </summary>
         /// <param name="deadPlayerId">사망한 플레이어 ID</param>
-        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        [Rpc(RpcSources.StateAuthority, RpcTargets.StateAuthority)]
         private void HandlePlayerDeathRPC(int deadPlayerId)
         {
             Debug.Log($"🎯 [HandlePlayerDeathRPC] 호출됨 - 사망자: Player {deadPlayerId}, IsGameFinished: {IsGameFinished}");
@@ -236,17 +246,8 @@ namespace MagicBattle.Managers
                 // 게임 상태를 게임오버로 변경
                 ChangeGameStateRPC(GameState.GameOver);
                 
-                // 게임 종료 이벤트 발생
-                var gameOverArgs = new GameOverArgs
-                {
-                    WinnerPlayerId = winnerId,
-                    LoserPlayerId = deadPlayerId,
-                    GameTime = GameTime,
-                    CurrentWave = CurrentWave
-                };
-                
-                Debug.Log($"📢 [HandlePlayerDeathRPC] GameOver 이벤트 발생 - WinnerId: {gameOverArgs.WinnerPlayerId}, LoserId: {gameOverArgs.LoserPlayerId}");
-                EventManager.Dispatch(GameEventType.GameOver, gameOverArgs);
+                // 모든 클라이언트에게 게임 결과 전송
+                ShowGameResultToAllPlayersRPC(winnerId, deadPlayerId);
                 
                 Debug.Log($"✅ [HandlePlayerDeathRPC] 게임 종료 처리 완료!");
             }
@@ -254,6 +255,57 @@ namespace MagicBattle.Managers
             {
                 Debug.LogError($"❌ [HandlePlayerDeathRPC] 승자를 찾을 수 없음!");
             }
+        }
+        
+        /// <summary>
+        /// 모든 플레이어에게 게임 결과 표시 (호스트가 모든 클라이언트에게 전송)
+        /// </summary>
+        /// <param name="winnerId">승리자 ID</param>
+        /// <param name="loserId">패배자 ID</param>
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void ShowGameResultToAllPlayersRPC(int winnerId, int loserId)
+        {
+            Debug.Log($"🎯 [ShowGameResultToAllPlayersRPC] 게임 결과 수신 - 승자: Player {winnerId}, 패자: Player {loserId}");
+            
+            // 게임 종료 이벤트 발생 (모든 클라이언트에서)
+            var gameOverArgs = new GameOverArgs
+            {
+                WinnerPlayerId = winnerId,
+                LoserPlayerId = loserId,
+                GameTime = GameTime,
+                CurrentWave = CurrentWave
+            };
+            
+            Debug.Log($"📢 [ShowGameResultToAllPlayersRPC] GameOver 이벤트 발생 - WinnerId: {gameOverArgs.WinnerPlayerId}, LoserId: {gameOverArgs.LoserPlayerId}");
+            EventManager.Dispatch(GameEventType.GameOver, gameOverArgs);
+            
+            // 로컬 플레이어인지 확인하여 추가 로그
+            var localPlayer = FindLocalPlayer();
+            if (localPlayer != null)
+            {
+                bool isWinner = localPlayer.PlayerId == winnerId;
+                Debug.Log($"🎮 [로컬 플레이어 {localPlayer.PlayerId}] 게임 결과: {(isWinner ? "승리!" : "패배!")}");
+            }
+        }
+        
+        /// <summary>
+        /// 로컬 플레이어 찾기 헬퍼 메서드
+        /// </summary>
+        /// <returns>로컬 플레이어 NetworkPlayer 컴포넌트</returns>
+        private NetworkPlayer FindLocalPlayer()
+        {
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (Runner.TryGetPlayerObject(player, out var playerObject))
+                {
+                    var networkPlayer = playerObject.GetComponent<NetworkPlayer>();
+                    if (networkPlayer != null && networkPlayer.IsLocalPlayer)
+                    {
+                        return networkPlayer;
+                    }
+                }
+            }
+            return null;
         }
 
         #endregion

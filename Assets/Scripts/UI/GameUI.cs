@@ -193,12 +193,16 @@ namespace MagicBattle.UI
         /// </summary>
         private void SubscribeToEvents()
         {
+            Debug.Log($"🔔 [GameUI] 이벤트 구독 시작");
+            
             EventManager.Subscribe(GameEventType.PlayerHealthChanged, OnPlayerHealthChanged);
             EventManager.Subscribe(GameEventType.GoldChanged, OnGoldChanged);
             EventManager.Subscribe(GameEventType.WaveChanged, OnWaveChanged);
             EventManager.Subscribe(GameEventType.GameStateChanged, OnGameStateChanged);
             EventManager.Subscribe(GameEventType.InventoryChanged, OnSkillInventoryChanged);
             EventManager.Subscribe(GameEventType.GameOver, OnGameOver); // 게임 종료 이벤트 구독
+            
+            Debug.Log($"✅ [GameUI] 모든 이벤트 구독 완료 (GameOver 이벤트 포함)");
         }
 
         /// <summary>
@@ -770,9 +774,16 @@ namespace MagicBattle.UI
         /// </summary>
         private void OnGameOver(object args)
         {
+            Debug.Log($"🎯 [GameUI] OnGameOver 이벤트 수신됨");
+            
             if (args is GameOverArgs gameOverArgs)
             {
+                Debug.Log($"🎮 [GameUI] 게임 결과 처리 시작 - 승자: Player {gameOverArgs.WinnerPlayerId}, 패자: Player {gameOverArgs.LoserPlayerId}");
                 ShowGameResult(gameOverArgs);
+            }
+            else
+            {
+                Debug.LogError($"❌ [GameUI] GameOverArgs 타입 변환 실패 - args 타입: {args?.GetType()}");
             }
         }
 
@@ -782,15 +793,28 @@ namespace MagicBattle.UI
         /// <param name="result">게임 결과 정보</param>
         private void ShowGameResult(GameOverArgs result)
         {
-            if (localPlayer == null) return;
+            Debug.Log($"🏆 [GameUI] ShowGameResult 호출됨");
+            
+            if (localPlayer == null) 
+            {
+                Debug.LogError($"❌ [GameUI] localPlayer가 null입니다!");
+                return;
+            }
 
             isGameFinished = true;
             bool isWinner = localPlayer.PlayerId == result.WinnerPlayerId;
+            
+            Debug.Log($"🎮 [GameUI] 로컬 플레이어 {localPlayer.PlayerId} 결과: {(isWinner ? "승리!" : "패배!")}");
 
             // 게임 결과 패널 활성화
             if (gameResultPanel != null)
             {
                 gameResultPanel.SetActive(true);
+                Debug.Log($"✅ [GameUI] 게임 결과 패널 활성화됨");
+            }
+            else
+            {
+                Debug.LogError($"❌ [GameUI] gameResultPanel이 null입니다!");
             }
 
             // 승리/패배 타이틀 설정
@@ -798,7 +822,15 @@ namespace MagicBattle.UI
             {
                 resultTitleText.text = isWinner ? "승리!" : "패배!";
                 resultTitleText.color = isWinner ? Color.yellow : Color.red;
+                Debug.Log($"🎯 [GameUI] 결과 텍스트 설정: {resultTitleText.text}");
             }
+            else
+            {
+                Debug.LogError($"❌ [GameUI] resultTitleText가 null입니다!");
+            }
+            
+            // 결과 사운드 재생
+            PlayResultSound(isWinner);
         }
 
         /// <summary>
