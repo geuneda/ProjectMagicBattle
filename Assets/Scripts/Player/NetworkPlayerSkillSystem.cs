@@ -615,6 +615,53 @@ namespace MagicBattle.Player
             return index != -1 ? SkillCounts[index] : 0;
         }
 
+        /// <summary>
+        /// 스킬의 현재 쿨다운 진행률 가져오기 (0: 쿨다운 완료, 1: 쿨다운 시작)
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        /// <returns>쿨다운 진행률 (0.0 ~ 1.0)</returns>
+        public float GetSkillCooldownProgress(string skillId)
+        {
+            // 활성 스킬 슬롯에서 해당 스킬 찾기
+            for (int i = 0; i < ActiveSkillIds.Length; i++)
+            {
+                if (ActiveSkillIds[i].ToString() == skillId)
+                {
+                    var cooldownTimer = SkillCooldowns[i];
+                    
+                    // 쿨다운이 없거나 만료된 경우
+                    if (cooldownTimer.ExpiredOrNotRunning(Runner))
+                        return 0f;
+                    
+                    // 남은 시간 가져오기
+                    float? remainingTime = cooldownTimer.RemainingTime(Runner);
+                    if (!remainingTime.HasValue || remainingTime.Value <= 0)
+                        return 0f;
+                    
+                    // 스킬 데이터에서 원래 쿨다운 시간 가져오기
+                    var skillData = GetSkillData(skillId);
+                    if (skillData == null || skillData.cooldown <= 0)
+                        return 0f;
+                    
+                    // 진행률 계산 (남은 시간 / 전체 시간)
+                    float progress = remainingTime.Value / skillData.cooldown;
+                    return Mathf.Clamp01(progress);
+                }
+            }
+            
+            return 0f; // 활성 스킬이 아니면 쿨다운 없음
+        }
+
+        /// <summary>
+        /// 스킬이 현재 쿨다운 중인지 확인
+        /// </summary>
+        /// <param name="skillId">스킬 ID</param>
+        /// <returns>쿨다운 중이면 true</returns>
+        public bool IsSkillOnCooldown(string skillId)
+        {
+            return GetSkillCooldownProgress(skillId) > 0f;
+        }
+
         #endregion
 
         #region Public Interface

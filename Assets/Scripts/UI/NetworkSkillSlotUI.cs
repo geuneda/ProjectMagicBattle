@@ -41,9 +41,6 @@ namespace MagicBattle.UI
         [SerializeField] private float pulseScale = 1.2f; // 펄스 시 확대 비율
         [SerializeField] private float pulseDuration = 0.3f; // 펄스 지속 시간
 
-        [Header("쿨다운 설정")]
-        [SerializeField] private Color cooldownSliderColor = new Color(1f, 1f, 1f, 0.8f); // 쿨다운 슬라이더 색상
-
         // 슬롯 데이터
         private SkillData skillData;
         private GameUI parentShop; // GameUI 참조로 변경
@@ -74,6 +71,11 @@ namespace MagicBattle.UI
             if (currentSkillCount > 0)
             {
                 UpdateCooldownSlider();
+            }
+            else if (cooldownSlider != null && cooldownSlider.gameObject.activeSelf)
+            {
+                // 스킬을 보유하지 않으면 쿨다운 슬라이더 숨김
+                cooldownSlider.gameObject.SetActive(false);
             }
         }
 
@@ -166,16 +168,7 @@ namespace MagicBattle.UI
                 cooldownSlider.maxValue = 1f;
                 cooldownSlider.value = 0f;
                 cooldownSlider.interactable = false; // 상호작용 비활성화
-                
-                // 슬라이더 색상 설정
-                if (cooldownSlider.fillRect != null)
-                {
-                    Image fillImage = cooldownSlider.fillRect.GetComponent<Image>();
-                    if (fillImage != null)
-                    {
-                        fillImage.color = cooldownSliderColor;
-                    }
-                }
+                cooldownSlider.gameObject.SetActive(false); // 초기에는 숨김
             }
         }
 
@@ -207,9 +200,6 @@ namespace MagicBattle.UI
 
             // 속성별 배경색 설정
             SetAttributeColor();
-
-            // 속성별 쿨다운 슬라이더 색상 설정
-            SetAttributeCooldownColor();
         }
 
         /// <summary>
@@ -292,9 +282,6 @@ namespace MagicBattle.UI
 
             // 합성 관련 UI 업데이트
             UpdateSynthesisUI();
-
-            // 쿨다운 슬라이더 초기 상태 설정
-            UpdateCooldownSliderVisibility(hasSkill);
         }
 
         /// <summary>
@@ -409,25 +396,6 @@ namespace MagicBattle.UI
             // 배경에 속성 색상 적용 (약간 투명하게)
             attributeColor.a = 0.3f;
             backgroundImage.color = attributeColor;
-        }
-
-        /// <summary>
-        /// 속성별 쿨다운 슬라이더 색상 설정
-        /// </summary>
-        private void SetAttributeCooldownColor()
-        {
-            if (skillData == null) return;
-
-            Color attributeColor = skillData.attribute switch
-            {
-                SkillAttribute.Fire => fireColor,
-                SkillAttribute.Ice => iceColor,
-                SkillAttribute.Thunder => thunderColor,
-                _ => cooldownSliderColor
-            };
-
-            // 쿨다운 슬라이더에 속성 색상 적용
-            SetCooldownSliderColor(attributeColor);
         }
 
         /// <summary>
@@ -615,39 +583,56 @@ namespace MagicBattle.UI
         {
             if (cooldownSlider == null || skillData == null) return;
 
-            // TODO: 실제 쿨다운 정보를 NetworkPlayerSkillSystem에서 가져와야 함
-            // 현재는 임시로 쿨다운 시각화를 비활성화
-            cooldownSlider.gameObject.SetActive(false);
-        }
-
-        /// <summary>
-        /// 쿨다운 슬라이더 색상 설정
-        /// </summary>
-        /// <param name="color">설정할 색상</param>
-        public void SetCooldownSliderColor(Color color)
-        {
-            cooldownSliderColor = color;
-            
-            if (cooldownSlider != null && cooldownSlider.fillRect != null)
+            // 로컬 플레이어의 스킬 시스템 찾기
+            var localSkillSystem = FindLocalPlayerSkillSystem();
+            if (localSkillSystem == null) 
             {
-                Image fillImage = cooldownSlider.fillRect.GetComponent<Image>();
-                if (fillImage != null)
-                {
-                    fillImage.color = color;
-                }
+                // 스킬 시스템을 찾을 수 없으면 쿨다운 슬라이더 숨김
+                cooldownSlider.gameObject.SetActive(false);
+                return;
+            }
+
+            // 쿨다운 진행률 가져오기 (1: 쿨다운 시작, 0: 쿨다운 완료)
+            float cooldownProgress = localSkillSystem.GetSkillCooldownProgress(skillData.SkillId);
+            
+            // 쿨다운 중인지 확인
+            bool isOnCooldown = cooldownProgress > 0f;
+            
+            // 쿨다운 중일 때만 슬라이더 표시
+            if (isOnCooldown)
+            {
+                cooldownSlider.gameObject.SetActive(true);
+                cooldownSlider.value = cooldownProgress; // 1에서 시작해서 0으로 감소
+            }
+            else
+            {
+                cooldownSlider.gameObject.SetActive(false);
             }
         }
 
         /// <summary>
-        /// 쿨다운 슬라이더 가시성 업데이트
+        /// 로컬 플레이어의 스킬 시스템 찾기
         /// </summary>
-        /// <param name="hasSkill">스킬 보유 여부</param>
-        private void UpdateCooldownSliderVisibility(bool hasSkill)
+        /// <returns>로컬 플레이어의 NetworkPlayerSkillSystem</returns>
+        private NetworkPlayerSkillSystem FindLocalPlayerSkillSystem()
         {
-            if (cooldownSlider == null) return;
+            // 캐시된 참조가 있으면 사용
+            if (parentShop != null && parentShop.GetLocalSkillSystem() != null)
+            {
+                return parentShop.GetLocalSkillSystem();
+            }
 
-            // 현재는 쿨다운 슬라이더 비활성화 (추후 구현 시 활성화)
-            cooldownSlider.gameObject.SetActive(false);
+            // 직접 찾기
+            var allSkillSystems = FindObjectsByType<NetworkPlayerSkillSystem>(FindObjectsSortMode.None);
+            foreach (var skillSystem in allSkillSystems)
+            {
+                if (skillSystem.Object != null && skillSystem.Object.HasInputAuthority)
+                {
+                    return skillSystem;
+                }
+            }
+
+            return null;
         }
 
         #endregion

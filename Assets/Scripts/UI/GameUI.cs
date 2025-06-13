@@ -558,7 +558,6 @@ namespace MagicBattle.UI
                 // 합성 가능 여부 표시
                 if (ownedCount >= 3 && skill.grade < SkillGrade.Grade3)
                 {
-                    skillOwnedCountText.text += " (합성 가능)";
                     skillOwnedCountText.color = Color.green;
                 }
                 else
@@ -928,6 +927,15 @@ namespace MagicBattle.UI
                 SkillGrade.Grade3 => "3등급",
                 _ => grade.ToString()
             };
+        }
+
+        /// <summary>
+        /// 로컬 플레이어의 스킬 시스템 가져오기
+        /// </summary>
+        /// <returns>로컬 플레이어의 NetworkPlayerSkillSystem</returns>
+        public NetworkPlayerSkillSystem GetLocalSkillSystem()
+        {
+            return localSkillSystem;
         }
 
         #endregion
