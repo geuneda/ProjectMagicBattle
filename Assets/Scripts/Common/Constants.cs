@@ -1,5 +1,3 @@
-using UnityEngine;
-
 namespace MagicBattle.Common
 {
     /// <summary>

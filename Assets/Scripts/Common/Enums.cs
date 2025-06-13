@@ -76,7 +76,26 @@ namespace MagicBattle.Common
         NetworkConnected,       // 네트워크 연결
         NetworkDisconnected,    // 네트워크 연결 해제
         PlayerJoined,           // 플레이어 참가
-        PlayerLeft              // 플레이어 나감
+        PlayerLeft,             // 플레이어 나감
+        
+        // 네트워크 플레이어 상태 동기화
+        NetworkPlayerStateSync, // 네트워크 플레이어 상태 동기화
+        NetworkPlayerSpawned,   // 네트워크 플레이어 스폰
+        NetworkPlayerDespawned, // 네트워크 플레이어 제거
+        
+        // 네트워크 스킬 및 전투
+        NetworkSkillUsed,       // 네트워크 스킬 사용
+        NetworkMonsterHit,      // 네트워크 몬스터 피격
+        NetworkPlayerDamaged,   // 네트워크 플레이어 피해
+        
+        // 네트워크 웨이브 시스템
+        NetworkWaveCompleted,   // 네트워크 웨이브 완료
+        NetworkMonsterSpawnRequested, // 네트워크 몬스터 스폰 요청
+        
+        // 네트워크 세션 관리
+        SessionJoined,          // 세션 참가
+        SessionLeft,            // 세션 나가기
+        ConnectionStatusChanged // 연결 상태 변경
     }
 
     /// <summary>

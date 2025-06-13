@@ -247,7 +247,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 10, y: 339.6}
+  m_AnchoredPosition: {x: 83.5, y: 339.59998}
   m_SizeDelta: {x: 300, y: 122.287964}
   m_Pivot: {x: 0, y: 0}
 --- !u!222 &6986605773045761175
@@ -809,7 +809,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6541378534519774290}
-  - component: {fileID: 5600019284818338821}
   m_Layer: 5
   m_Name: MainGameUI
   m_TagString: Untagged
@@ -840,24 +839,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &5600019284818338821
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8013652715860337928}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3e96d49c29e1347408b0eed4db07b85a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  killCountText: {fileID: 8344197833417246813}
-  waveText: {fileID: 4896931293782025953}
-  waveTimerText: {fileID: 8231532757531186862}
-  waveStateText: {fileID: 0}
-  healthSlider: {fileID: 2997187594358152564}
-  healthText: {fileID: 5943600458864665992}
 --- !u!1 &8394433453028859197
 GameObject:
   m_ObjectHideFlags: 0

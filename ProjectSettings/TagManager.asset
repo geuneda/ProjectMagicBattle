@@ -6,6 +6,8 @@ TagManager:
   tags:
   - Monster
   - Projectile
+  - PlayerSpawnPoint
+  - FxTemporaire
   layers:
   - Default
   - TransparentFX
@@ -40,6 +42,9 @@ TagManager:
   - 
   - 
   m_SortingLayers:
+  - name: Background
+    uniqueID: 83679129
+    locked: 0
   - name: Default
     uniqueID: 0
     locked: 0
